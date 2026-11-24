@@ -1,0 +1,15 @@
+# Собранные программы — выкладываются в GitHub Releases, а не в репозиторий
+bin/
+dist/
+tools/bin/
+*.exe
+*.pdb
+
+# Временные файлы
+*.tmp
+*.new
+*.old
+design-backup/before-restore/
+
+# Личные настройки Claude Code
+.claude/settings.local.json
