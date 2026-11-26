@@ -17,7 +17,7 @@ namespace TunexSetup
     static class Program
     {
         public const string AppName = "Tunex";
-        public const string Version = "0.1";   // держать в паре с Theme.Version в src\Core.cs
+        public const string Version = "0.2";   // держать в паре с Theme.Version в src\Core.cs
         public const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Tunex";
         public const string SettingsKey = @"Software\Tunex";
 

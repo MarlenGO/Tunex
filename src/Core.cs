@@ -16,7 +16,7 @@ namespace Tunex
     static class Theme
     {
         public const string AppName = "Tunex";
-        public const string Version = "0.1";
+        public const string Version = "0.2";
 
         public static float Scale = 1f;
 
