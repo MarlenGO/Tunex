@@ -8,7 +8,7 @@ namespace Tunex
 {
     class MonitorInfo
     {
-        public string Device, Name;
+        public string Device, Name, Adapter;   // Adapter — видеокарта, к которой подключён монитор
         public Rectangle Bounds; public bool Primary;
         public IntPtr Physical;
         public bool Ddc, HasContrast, Wmi;
@@ -41,6 +41,7 @@ namespace Tunex
                 m.Bounds = Rectangle.FromLTRB(mi.rcMonitor.Left, mi.rcMonitor.Top, mi.rcMonitor.Right, mi.rcMonitor.Bottom);
                 m.Primary = (mi.dwFlags & 1) != 0;
                 m.Name = FriendlyName(mi.szDevice);
+                m.Adapter = AdapterOf(mi.szDevice);
                 m.Hz = CurrentHz(m.Device);
                 m.Rates = Rates(m.Device);
                 if (probeDdc) ProbeDdc(hMon, m);
@@ -87,6 +88,18 @@ namespace Tunex
                 { m.HasContrast = true; m.CMin = (int)mn; m.CMax = (int)mx; m.CCur = (int)cur; }
             }
             catch { }
+        }
+
+        public static string AdapterOf(string device)
+        {
+            Native.DISPLAY_DEVICE dd = new Native.DISPLAY_DEVICE();
+            dd.cb = Marshal.SizeOf(typeof(Native.DISPLAY_DEVICE));
+            for (uint i = 0; Native.EnumDisplayDevices(null, i, ref dd, 0); i++)
+            {
+                if (string.Equals(dd.DeviceName, device, StringComparison.OrdinalIgnoreCase)) return (dd.DeviceString ?? "").Trim();
+                dd.cb = Marshal.SizeOf(typeof(Native.DISPLAY_DEVICE));
+            }
+            return null;
         }
 
         static string FriendlyName(string device)

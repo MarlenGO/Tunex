@@ -44,7 +44,7 @@ namespace Tunex
             Fit(); Invalidate();
         }
 
-        void Fit() { Size = new Size(Theme.S(38) + Theme.Measure(label, Theme.FontSmallBold).Width, Theme.S(26)); }
+        void Fit() { Size = new Size(Theme.S(42) + Theme.Measure(label, Theme.FontSmallBold).Width, Theme.S(28)); }
 
         protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; Invalidate(); }
@@ -53,10 +53,10 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, hover ? Theme.CardHover : Theme.Button, r, Theme.Sf(3));
-            Theme.DrawRound(g, hover ? Theme.Text3 : Theme.ButtonBorder, r, Theme.Sf(3), 1f);
-            Theme.Glyph(g, Icons.Save, Theme.FontIconSmall, Theme.Accent, new Rectangle(Theme.S(8), 0, Theme.S(18), Height));
-            Theme.DrawText(g, label, Theme.FontSmallBold, Theme.Text, new Rectangle(Theme.S(30), 0, Width - Theme.S(34), Height), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            // gw-pill: маленькая круглая кнопка с серой заливкой
+            Theme.FillRound(g, hover ? Theme.CardHover : Theme.CardInner, r, r.Height / 2);
+            Theme.Glyph(g, Icons.Save, Theme.FontIconSmall, Theme.Accent, new Rectangle(Theme.S(10), 0, Theme.S(18), Height));
+            Theme.DrawText(g, label, Theme.FontSmallBold, Theme.Text, new Rectangle(Theme.S(32), 0, Width - Theme.S(38), Height), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
     }
 
@@ -129,6 +129,8 @@ namespace Tunex
             ((MainForm)form).ToggleMaximize();
         }
 
+        protected override void OnPaintBackground(PaintEventArgs e) { Theme.PaintBackdrop(e.Graphics, this, ClientRectangle); }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
@@ -143,8 +145,8 @@ namespace Tunex
             for (int i = 0; i < 3; i++)
             {
                 Rectangle r = Btn(i);
-                if (i == hoverBtn) Theme.FillRound(g, i == 2 ? Color.FromArgb(196, 43, 28) : Theme.CardHover, new RectangleF(r.X, r.Y, r.Width, r.Height), 2);
-                Theme.Glyph(g, glyphs[i], Theme.FontIconTiny, i == hoverBtn ? Theme.Text : Theme.Text2, r);
+                if (i == hoverBtn) Theme.FillRound(g, i == 2 ? Theme.Red : Theme.CardInner, new RectangleF(r.X, r.Y, r.Width, r.Height), r.Height / 2f);
+                Theme.Glyph(g, glyphs[i], Theme.FontIconTiny, i == hoverBtn ? (i == 2 ? Color.White : Theme.Text) : Theme.Text2, r);
             }
         }
     }
@@ -164,9 +166,10 @@ namespace Tunex
             Graphics g = e.Graphics; Theme.Smooth(g);
             int s = Theme.S(40);
             RectangleF r = new RectangleF((Width - s) / 2f, (Height - s) / 2f, s, s);
-            if (hover && !Active) Theme.FillRound(g, Color.FromArgb(14, 255, 255, 255), r, 2);
-            if (Active) using (SolidBrush ab = new SolidBrush(Theme.Accent)) g.FillRectangle(ab, 0, (Height - Theme.S(22)) / 2, Theme.S(3), Theme.S(22));
-            Color c = Active ? Theme.Accent : hover ? Theme.Text : Theme.Text3;
+            // gw-nav: выбранный раздел — мягкий фон цвета акцента и значок тем же цветом
+            if (Active) Theme.FillRound(g, Theme.AccentSoft, r, Theme.Sf(10));
+            else if (hover) Theme.FillRound(g, Theme.CardInner, r, Theme.Sf(10));
+            Color c = Active ? Theme.Accent : hover ? Theme.Text : Theme.Text2;
             Theme.Glyph(g, Glyph, Theme.FontIconNav, c, Rectangle.Round(r));
         }
     }
@@ -193,8 +196,8 @@ namespace Tunex
                 };
                 tip.Draw += delegate(object s, DrawToolTipEventArgs e)
                 {
-                    using (SolidBrush b = new SolidBrush(Theme.CardInner)) e.Graphics.FillRectangle(b, e.Bounds);
-                    using (Pen p = new Pen(Theme.Border)) e.Graphics.DrawRectangle(p, 0, 0, e.Bounds.Width - 1, e.Bounds.Height - 1);
+                    using (SolidBrush b = new SolidBrush(Theme.Pop)) e.Graphics.FillRectangle(b, e.Bounds);
+                    using (Pen p = new Pen(Theme.Frame)) e.Graphics.DrawRectangle(p, 0, 0, e.Bounds.Width - 1, e.Bounds.Height - 1);
                     TextRenderer.DrawText(e.Graphics, e.ToolTipText, Theme.FontBodyBold, e.Bounds, Theme.Text,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
                 };
@@ -238,18 +241,7 @@ namespace Tunex
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            using (SolidBrush b = new SolidBrush(Theme.Sidebar)) g.FillRectangle(b, ClientRectangle);
-            using (GraphicsPath p = new GraphicsPath())
-            {
-                RectangleF glow = new RectangleF(-Width * 0.6f, -Theme.Sf(260), Width * 1.8f, Theme.Sf(560));
-                p.AddEllipse(glow);
-                using (PathGradientBrush pb = new PathGradientBrush(p))
-                {
-                    pb.CenterColor = Theme.Alpha(Theme.SidebarGlow, 200);
-                    pb.SurroundColors = new Color[] { Theme.Alpha(Theme.Sidebar, 0) };
-                    g.FillPath(pb, p);
-                }
-            }
+            Theme.PaintBackdrop(g, this, ClientRectangle);
             using (Pen pen = new Pen(Theme.Border)) g.DrawLine(pen, Width - 1, 0, Width - 1, Height);
         }
 
@@ -289,8 +281,8 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(Theme.Sf(20), Theme.Sf(8), Width - Theme.Sf(40), Height - Theme.Sf(16));
-            Theme.FillRound(g, Theme.Card, r, Theme.Sf(16));
-            Theme.DrawRound(g, Theme.Alpha(Theme.Accent, 140), r, Theme.Sf(16), 1f);
+            Theme.FillRound(g, Theme.Pop, r, Theme.Sf(14));
+            Theme.DrawRound(g, Theme.Alpha(Theme.Accent, 110), r, Theme.Sf(14), 1f);
             int x = Theme.S(40);
             Theme.DrawText(g, Info, Theme.FontBodyBold, Theme.Text, new Rectangle(x, Theme.S(18), CancelBtn.Left - x, Theme.S(22)), TextFormatFlags.EndEllipsis);
             Theme.DrawText(g, Sub, Theme.FontSmall, Theme.Text2, new Rectangle(x, Theme.S(41), CancelBtn.Left - x, Theme.S(20)), TextFormatFlags.EndEllipsis);
@@ -316,11 +308,12 @@ namespace Tunex
             App.Form = this;
             App.Manager = new TweakManager(AppState.Load(), sensors);
             Color accent;
-            if (Theme.TryHex(App.Manager.State.Accent, out accent)) Theme.SetAccent(accent);
+            Theme.Accent = Theme.TryHex(App.Manager.State.Accent, out accent) ? accent : Color.Empty;
+            Theme.SetMode(App.Manager.State.ThemeMode);
 
             Text = Theme.AppName;
             FormBorderStyle = FormBorderStyle.None;
-            BackColor = Theme.Border;
+            BackColor = Theme.Frame;
             Padding = new Padding(1);
             Size = new Size(Theme.S(1180), Theme.S(780));
             MinimumSize = new Size(Theme.S(860), Theme.S(560));
@@ -351,11 +344,13 @@ namespace Tunex
             factories["look"] = delegate { return new LookPage(); };
             factories["backup"] = delegate { return new BackupPage(); };
             factories["settings"] = delegate { return new SettingsPage(); };
+            factories["fps"] = delegate { return new FpsPage(); };
 
             sidebar.AddItem("home", Icons.Home, "Главная");
             sidebar.AddItem("tune", Icons.Speed, "Оптимизация");
             sidebar.AddItem("pc", Icons.Cpu, "Оценка ПК");
             sidebar.AddItem("games", Icons.Library, "Игры");
+            sidebar.AddItem("fps", Icons.Fps, "Замер FPS");
             sidebar.AddItem("display", Icons.Display, "Экран");
             sidebar.AddItem("nvidia", Icons.Chip, "NVIDIA");
             sidebar.AddSeparator();
@@ -369,14 +364,23 @@ namespace Tunex
             tick.Tick += delegate
             {
                 App.Manager.CheckObservations();
+                try { FpsMeter.Tick(); } catch { }
                 if (current != null) current.OnTick();
                 if (++gameTick % 3 == 0) { try { WatchGames(); } catch { } }
                 if (gameTick % 15 == 0) UpdateBackupButton();
             };
 
+            FpsMeter.Finished += delegate(FpsRun r, string err)
+            {
+                if (err != null) { ShowToast("Замер FPS: " + err, Theme.Red, 8000); return; }
+                ShowToast("Замер готов: " + r.Game + " — в среднем " + FpsPage.Fps(r.Avg) + " FPS, 1% низкие " + FpsPage.Fps(r.Low1) + ".", Theme.Green, 8000);
+                if (currentKey != "fps") Navigate("fps");
+            };
+
             Application.AddMessageFilter(new EdgeResizer(this));
             sensors.Start();
             ThreadPool.QueueUserWorkItem(delegate { SysInfo.LoadHardware(); });
+            ThreadPool.QueueUserWorkItem(delegate { try { PresentMon.CleanupSessions(); } catch { } });   // записи FPS после аварийного выхода
             // Первый запуск: запомнить «как было до Tunex»; потом показать время последнего бэкапа
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -396,6 +400,18 @@ namespace Tunex
                 if (a == "--tweak" && next != null) Shown += delegate { ShowTweak(Catalog.Resolve(next), null); };
                 if (a == "--wizard") Shown += delegate { StartWizard(); };
                 if (a == "--bench") Shown += delegate { RunBench(); };
+                if (a == "--bottom") Shown += delegate
+                {
+                    // Через 4 с — страницы вроде «Оценки ПК» заполняются в фоне
+                    System.Windows.Forms.Timer t = new System.Windows.Forms.Timer(); t.Interval = 4000;
+                    t.Tick += delegate { t.Dispose(); if (current != null) { current.AutoScrollPosition = new Point(0, current.DisplayRectangle.Height); current.Invalidate(true); } };
+                    t.Start();
+                };
+                if (a == "--fpssummary") Shown += delegate
+                {
+                    List<FpsRun> l = App.Manager.State.FpsRuns;
+                    if (l.Count > 0) ShowCard(new FpsSummaryDialog(l[l.Count - 1]));
+                };
             }
         }
 
@@ -414,7 +430,41 @@ namespace Tunex
         {
             base.OnHandleCreated(e);
             int v = 2; Native.DwmSetWindowAttribute(Handle, 33, ref v, 4);   // скруглённые углы Windows 11
-            int dark = 1; Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
+            int dark = Theme.Dark ? 1 : 0; Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
+            RegisterHotKey(Handle, HotkeyFps, 0x0002 | 0x0004 | 0x4000, 0x78);   // Ctrl + Shift + F9, без автоповтора
+        }
+
+        const int HotkeyFps = 0x7F01;
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
+
+        public void ShowCard(Control c) { modal.Open(this, c); }
+
+        // Смена темы «Стекло»: светлая, тёмная или как в Windows — перекрашиваем окно и пересобираем разделы
+        public void SetThemeMode(string mode)
+        {
+            Theme.SetMode(mode);
+            App.Manager.State.ThemeMode = mode;
+            App.Manager.State.Accent = Theme.ToHex(Theme.Accent);
+            App.Manager.State.Save();
+            if (title.AdminPill != null) title.AdminPill.Tint = SysInfo.IsAdmin ? Theme.Green : Theme.Orange;
+            int dark = Theme.Dark ? 1 : 0; Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
+            BackColor = Theme.Frame; content.BackColor = Theme.Bg; title.BackColor = Theme.Sidebar; sidebar.BackColor = Theme.Sidebar; modal.BackColor = Theme.Bg;
+            RebuildPages();
+        }
+
+        void RebuildPages()
+        {
+            BeginInvoke(new Action(delegate
+            {
+                string key = currentKey;
+                content.SuspendLayout();
+                foreach (Page p in new List<Page>(pages.Values)) { content.Controls.Remove(p); p.Dispose(); }
+                pages.Clear(); current = null; currentKey = null;
+                Navigate(key ?? "home");
+                content.ResumeLayout();
+                sidebar.Invalidate(true); title.Invalidate(true); Invalidate(true);
+            }));
         }
 
         // Изменение размера окна без рамки: ловим мышь у краёв окна, даже если там дочерний элемент
@@ -454,6 +504,13 @@ namespace Tunex
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == 0x0312 && m.WParam.ToInt32() == HotkeyFps)   // WM_HOTKEY: Ctrl + Shift + F9 — замер FPS прямо из игры
+            {
+                string err = FpsMeter.Hotkey();
+                if (err != null) ShowToast("Замер FPS не начался: " + err, Theme.Red, 8000);
+                if (current != null) current.OnTick();
+                return;
+            }
             base.WndProc(ref m);
             if (m.Msg == Native.WM_NCHITTEST && WindowState == FormWindowState.Normal)
             {
@@ -491,16 +548,7 @@ namespace Tunex
             Theme.SetAccent(c);
             App.Manager.State.Accent = Theme.ToHex(c);
             App.Manager.State.Save();
-            BeginInvoke(new Action(delegate
-            {
-                string key = currentKey;
-                content.SuspendLayout();
-                foreach (Page p in new List<Page>(pages.Values)) { content.Controls.Remove(p); p.Dispose(); }
-                pages.Clear(); current = null; currentKey = null;
-                Navigate(key ?? "home");
-                content.ResumeLayout();
-                sidebar.Invalidate(true); title.Invalidate(true); Invalidate(true);
-            }));
+            RebuildPages();
         }
 
         public void Navigate(string key)
@@ -658,16 +706,28 @@ namespace Tunex
 
         // ---------------------------------------------------------------- Слежение за играми
         string runningGame; int watchTick;
+        FpsSession gameFps;   // запись FPS за всю игру для «Итога после игры»
+
+        void RebuildCurrentFps()
+        {
+            Page p;
+            if (pages.TryGetValue("fps", out p)) { content.Controls.Remove(p); pages.Remove("fps"); p.Dispose(); }
+            current = null; currentKey = null;
+            Navigate("fps");
+        }
 
         void WatchGames()
         {
             AppState st = App.Manager.State;
             bool lower = st.Flags.Contains("lowerbg"), mem = st.Flags.Contains("cleanmem");
-            if (!lower && !mem && runningGame == null) return;
+            if (!lower && !mem && !st.GameSummary && runningGame == null) return;
             string g = BackgroundPriority.RunningGame(st.Games);
+            if (gameFps != null && g != null) gameFps.Sample();
             if (g != null && runningGame == null)
             {
                 runningGame = g;
+                if (st.GameSummary && gameFps == null) gameFps = FpsSession.TryStart(g + ".exe");
+                if (!lower && !mem) return;
                 int n = lower ? BackgroundPriority.Lower() : 0;
                 string game = g;
                 ThreadPool.QueueUserWorkItem(delegate
@@ -683,6 +743,28 @@ namespace Tunex
             else if (g == null && runningGame != null)
             {
                 runningGame = null;
+                if (gameFps != null)
+                {
+                    FpsSession s = gameFps; gameFps = null;
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        FpsRun r = null;
+                        try { r = s.Finish(); } catch { }
+                        if (r == null) return;
+                        try
+                        {
+                            BeginInvoke(new Action(delegate
+                            {
+                                FpsHistory.Add(r);
+                                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                                Activate();
+                                if (!modal.IsOpen) ShowCard(new FpsSummaryDialog(r));
+                                if (currentKey == "fps") RebuildCurrentFps();
+                            }));
+                        }
+                        catch { }
+                    });
+                }
                 if (BackgroundPriority.Active) { BackgroundPriority.RestoreAll(); ShowToast("Игра закрыта — фоновые программы снова работают как обычно.", Theme.Accent, 4000); }
             }
         }
@@ -704,6 +786,9 @@ namespace Tunex
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             tick.Stop();
+            try { UnregisterHotKey(Handle, HotkeyFps); } catch { }
+            FpsMeter.Shutdown();
+            if (gameFps != null) { try { gameFps.Finish(); } catch { } gameFps = null; }
             BackgroundPriority.RestoreAll();
             sensors.Dispose();
             Displays.ReleaseAll();

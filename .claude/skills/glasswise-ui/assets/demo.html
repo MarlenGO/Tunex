@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GlassWise UI</title>
+<link rel="stylesheet" href="glasswise/tokens.css">
+<link rel="stylesheet" href="glasswise/components.css">
+<script src="glasswise/glasswise.js"></script>
+<style>
+  /* только для этой страницы-образца */
+  .sw-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:10px; }
+  .sw { border-radius:12px; overflow:hidden; background:var(--card); box-shadow:var(--shadow); font-size:12px; }
+  .sw i { display:block; height:44px; }
+  .sw span { display:block; padding:6px 9px 8px; }
+  .sw code { background:none; padding:0; color:var(--label2); }
+  section { scroll-margin-top:calc(var(--top) + 16px); }
+  .stack { display:flex; flex-direction:column; gap:10px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:760px) { .two { grid-template-columns:1fr; } }
+</style>
+</head>
+<body class="gw">
+<header class="gw-top" data-bar-top>
+  <a class="gw-brand" href="#"><i><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5l1.7 4.1 4.3.4-3.3 2.8 1 4.2L8 10.8 4.3 13l1-4.2L2 6l4.3-.4z"/></svg></i><span>GlassWise UI</span></a>
+  <nav class="gw-pages" data-seg="pages" data-seg-tint data-seg-pill data-seg-auto>
+    <a href="#" class="on">Компоненты</a><a href="#">Токены</a><a href="#">Правила</a>
+  </nav>
+  <div class="gw-end"><button class="gw-circle" id="themeBtn" title="Тема" aria-haspopup="menu"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5v11a5.5 5.5 0 010-11z"/></svg></button></div>
+</header>
+
+<div class="gw-layout">
+  <aside class="gw-aside" data-bar>
+    <nav class="gw-nav" id="toc" data-seg="toc" data-seg-tint data-seg-auto>
+      <a href="#colors" class="on">Цвета</a><a href="#type">Текст</a><a href="#buttons">Кнопки</a><a href="#chips">Метки</a>
+      <a href="#lists">Списки и карточки</a><a href="#settings">Настройки</a><a href="#fields">Поля</a><a href="#overlays">Окна и уведомления</a>
+    </nav>
+  </aside>
+
+  <main class="gw-main">
+    <h1 class="gw-h1">GlassWise UI</h1>
+    <p class="gw-sub">Оформление «Стекло» из EduWise: светлая и тёмная тема, спокойное движение, без библиотек и сборки.</p>
+
+    <section id="colors">
+      <div class="gw-sec">Цвета</div>
+      <div class="sw-grid" id="swatches"></div>
+    </section>
+
+    <section id="type">
+      <div class="gw-sec">Текст</div>
+      <div class="gw-card stack">
+        <h2 class="gw-h2">Заголовок раздела</h2>
+        <div>Обычный текст 14 px. Шрифт системный: SF Pro на Mac, Segoe UI Variable на Windows.</div>
+        <div class="gw-muted" style="font-size:12.5px">Подпись — цвет <code>--label2</code>, светлее не делать.</div>
+      </div>
+    </section>
+
+    <section id="buttons">
+      <div class="gw-sec">Кнопки</div>
+      <div class="gw-card stack">
+        <div class="gw-row">
+          <button class="gw-btn main">Главное действие</button>
+          <button class="gw-btn">Обычная</button>
+          <button class="gw-btn danger">Удалить</button>
+          <button class="gw-btn" disabled>Недоступна</button>
+          <button class="gw-btn main" disabled style="opacity:1"><i class="gw-ring"></i>Загружаю</button>
+        </div>
+        <div class="gw-row">
+          <button class="gw-pill main">Капсула</button>
+          <button class="gw-pill tint">Мягкая</button>
+          <button class="gw-pill">Серая</button>
+          <button class="gw-ib" title="Изменить"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg></button>
+          <button class="gw-ib del" title="Удалить"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"/></svg></button>
+          <button class="gw-circle" title="Добавить"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>
+          <button class="gw-link">Ссылка</button>
+          <button class="gw-link danger">Опасная ссылка</button>
+        </div>
+        <div class="gw-seg" data-seg="tabs" data-seg-auto style="max-width:360px">
+          <button class="on">Уроки</button><button>Подсказки</button><button>Курсы</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="chips">
+      <div class="gw-sec">Метки</div>
+      <div class="gw-card gw-row">
+        <span class="gw-chip">Черновик</span><span class="gw-chip green">Готово</span><span class="gw-chip orange">Проверить</span>
+        <span class="gw-chip red">Ошибка</span><span class="gw-chip gray">В архиве</span>
+        <span class="gw-tag"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3.5" width="11" height="9" rx="2"/></svg>Кнопка «Сохранить»</span>
+        <span class="gw-badge">1</span><span class="gw-badge" style="background:var(--orange)">2</span><span class="gw-ic">A</span>
+      </div>
+    </section>
+
+    <section id="lists">
+      <div class="gw-sec">Список <button class="gw-link">Все</button></div>
+      <ul class="gw-list">
+        <li><span class="gw-ic">1</span><div class="gw-t"><b>Как создать заявку</b><small>7 шагов · обновлён сегодня</small></div><span class="gw-chip green">Готово</span></li>
+        <li><span class="gw-ic">2</span><div class="gw-t"><b>Согласование договора</b><small>12 шагов</small></div><span class="gw-chip">Черновик</span></li>
+        <li><span class="gw-ic">3</span><div class="gw-t"><b>Отпуск сотрудника</b><small>5 шагов</small></div><button class="gw-ib" title="Ещё"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg></button></li>
+      </ul>
+      <div class="gw-sec">Карточки</div>
+      <ol class="gw-cards">
+        <li><div class="gw-row"><span class="gw-badge">1</span><b style="flex:1">Нажмите «Создать»</b><span class="gw-chip gray">нажать</span></div><div class="gw-muted" style="font-size:12.5px">Кнопка в правом верхнем углу.</div></li>
+        <li><div class="gw-row"><span class="gw-badge">2</span><b style="flex:1">Заполните поле «Тема»</b><span class="gw-chip gray">ввести</span></div></li>
+      </ol>
+      <div class="gw-sec">Пусто</div>
+      <div class="gw-empty"><div class="big"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M5.5 8h5M8 5.5v5" stroke-linecap="round"/></svg></div><b>Здесь пока ничего нет</b>Создайте первый урок — он появится в этом списке.</div>
+    </section>
+
+    <section id="settings">
+      <div class="gw-sec">Настройки</div>
+      <div class="two">
+        <div class="gw-card stack">
+          <div class="gw-grp">
+            <label class="gw-opt"><span>Показывать подсказки<small>Над полями формы</small></span><span class="gw-switch"><input type="checkbox" checked></span></label>
+            <label class="gw-opt"><span>Не давать нажимать мимо</span><span class="gw-switch"><input type="checkbox"></span></label>
+            <button class="gw-opt" id="langBtn" style="width:100%;text-align:left"><span>Язык</span><span class="gw-v" id="langV">Русский</span></button>
+          </div>
+        </div>
+        <div class="gw-card stack">
+          <label class="gw-label">Действие шага</label>
+          <button class="gw-dd" id="actBtn" aria-haspopup="menu"><span id="actV">Нажать</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg></button>
+          <div class="gw-muted" style="font-size:12.5px">Свой выпадающий список вместо системного: <code>GW.menu()</code>.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fields">
+      <div class="gw-sec">Поля</div>
+      <div class="gw-card stack">
+        <div><label class="gw-label" for="f1">Название</label><input class="gw-field" id="f1" placeholder="Например, «Создание заявки»"></div>
+        <div><label class="gw-label" for="f2">Описание</label><textarea class="gw-field" id="f2" placeholder="Коротко, что узнает сотрудник"></textarea></div>
+      </div>
+    </section>
+
+    <section id="overlays">
+      <div class="gw-sec">Окна и уведомления</div>
+      <div class="gw-card gw-row">
+        <button class="gw-btn" id="sheetBtn">Открыть окно снизу</button>
+        <button class="gw-btn" id="toastBtn">Показать уведомление</button>
+        <button class="gw-btn" id="menuBtn" aria-haspopup="menu">Меню</button>
+      </div>
+      <div style="height:40vh"></div>
+    </section>
+  </main>
+</div>
+
+<div class="gw-sheet" id="sheet" hidden>
+  <div class="gw-sh">
+    <div class="gw-sh-head"><b>Вложение по ссылке</b><button class="gw-ib" data-close title="Закрыть"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+    <p class="gw-sub" style="margin-bottom:12px">Вставьте адрес картинки или видео.</p>
+    <input class="gw-field" placeholder="https://…">
+    <div class="gw-sh-acts"><button class="gw-pill" data-close>Отмена</button><button class="gw-pill main" data-close>Добавить</button></div>
+  </div>
+</div>
+
+<script>
+  // образцы цветов
+  const tokens = ['--blue', '--red', '--orange', '--green', '--indigo', '--teal', '--purple', '--gray', '--label', '--label2', '--card', '--fill', '--field', '--tint'];
+  document.getElementById('swatches').innerHTML = tokens.map((t) => `<div class="sw"><i style="background:var(${t})"></i><span><code>${t}</code></span></div>`).join('');
+
+  const $ = (id) => document.getElementById(id);
+  const names = { auto: 'Как в системе', light: 'Светлая', dark: 'Тёмная' };
+  $('themeBtn').onclick = (e) => GW.menu(e.currentTarget, Object.keys(names).map((v) => ({ value: v, label: names[v], on: GW.theme.get() === v })), (v) => GW.theme.set(v));
+  const langs = ['Русский', 'English', 'Қазақша'];
+  $('langBtn').onclick = (e) => GW.menu(e.currentTarget, langs.map((l) => ({ value: l, label: l, on: $('langV').textContent === l })), (v) => ($('langV').textContent = v));
+  const acts = [{ value: 'Нажать', hint: 'Ждать щелчка по элементу' }, { value: 'Ввести', hint: 'Ждать, пока заполнят поле' }, { value: 'Навести курсор' }, { value: 'Только пояснение' }];
+  $('actBtn').onclick = (e) => GW.menu(e.currentTarget, acts.map((a) => ({ ...a, label: a.value, on: $('actV').textContent === a.value })), (v) => ($('actV').textContent = v));
+  $('menuBtn').onclick = (e) => GW.menu(e.currentTarget, [{ value: 'copy', label: 'Копировать' }, { value: 'move', label: 'Переместить' }, '-', { value: 'del', label: 'Удалить', danger: true }],
+    (v) => v === 'del' && GW.toast('Урок удалён', { action: 'Вернуть', onAction: () => GW.toast('Урок вернулся') }));
+  $('sheetBtn').onclick = () => GW.sheet($('sheet'));
+  document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => GW.sheet.close($('sheet'))));
+  $('toastBtn').onclick = () => GW.toast('Сохранено', { action: 'Отменить' });
+  // ссылки шапки — без перехода
+  document.querySelectorAll('.gw-pages a').forEach((a) => a.addEventListener('click', (e) => e.preventDefault()));
+  // оглавление: пункт текущего раздела подсвечен, бегунок переезжает
+  const secs = [...document.querySelectorAll('main section')];
+  addEventListener('scroll', () => {
+    const cur = secs.filter((s) => s.getBoundingClientRect().top < 140).pop() || secs[0];
+    const links = document.querySelectorAll('#toc a'), a = document.querySelector(`#toc a[href="#${cur.id}"]`);
+    if (a.classList.contains('on')) return;
+    links.forEach((x) => x.classList.toggle('on', x === a)); GW.seg($('toc'));
+  }, { passive: true });
+</script>
+</body>
+</html>

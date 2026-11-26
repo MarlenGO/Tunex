@@ -828,9 +828,13 @@ namespace Tunex
         public List<BenchResult> Benchmarks = new List<BenchResult>();
         public bool RestorePromptShown;
         public string Accent;   // цвет акцента «#RRGGBB», пусто — по умолчанию
+        public string ThemeMode;   // тема: "light", "dark", пусто — как в Windows
         public List<string> ReqGames = new List<string>();   // игры, добавленные для проверки требований: «appid|название»
         public bool NoAutoUpdate;                // автообновление выключено (по умолчанию включено)
         public string UpdateChecked, UpdateStatus, PendingVersion;   // последняя проверка, её итог, скачанная версия
+        public List<FpsRun> FpsRuns = new List<FpsRun>();   // замеры FPS: по кнопке и за всю игру
+        public bool GameSummary;                 // показывать итог после игры (запись FPS, пока идёт игра из списка)
+        public int FpsDuration;                  // длительность замера по кнопке, секунд (0 — 60)
 
         public static string Dir
         {
@@ -859,6 +863,8 @@ namespace Tunex
                         if (s.Flags == null) s.Flags = new List<string>();
                         if (s.Benchmarks == null) s.Benchmarks = new List<BenchResult>();
                         if (s.ReqGames == null) s.ReqGames = new List<string>();
+                        if (s.FpsRuns == null) s.FpsRuns = new List<FpsRun>();
+                        s.FpsRuns.RemoveAll(delegate(FpsRun r) { return r == null || r.Time == null || r.Game == null; });
                         s.Benchmarks.RemoveAll(delegate(BenchResult b) { return b == null || b.Version != Bench.Version; }); // старая формула
                         return s;
                     }

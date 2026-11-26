@@ -117,10 +117,10 @@ namespace Tunex
 
             Add(new SectionLabel("Мониторинг"));
             TileRow tiles = Add(new TileRow());
-            cpu = new StatTile(Icons.Cpu, "ПРОЦЕССОР", Theme.Accent);
-            gpu = new StatTile(Icons.Gpu, "ВИДЕОКАРТА", Theme.Blue);
-            ram = new StatTile(Icons.Memory, "ОПЕРАТИВНАЯ ПАМЯТЬ", Theme.Purple);
-            vram = new StatTile(Icons.Chip, "ВИДЕОПАМЯТЬ", Theme.Orange);
+            cpu = new StatTile(Icons.Cpu, "Процессор", Theme.Accent);
+            gpu = new StatTile(Icons.Gpu, "Видеокарта", Theme.Blue);
+            ram = new StatTile(Icons.Memory, "Оперативная память", Theme.Purple);
+            vram = new StatTile(Icons.Chip, "Видеопамять", Theme.Orange);
             tiles.AddTile(cpu); tiles.AddTile(gpu); tiles.AddTile(ram); tiles.AddTile(vram);
 
             Add(new SectionLabel("Что можно улучшить"));
@@ -317,6 +317,28 @@ namespace Tunex
                 }
             }
             catch { }
+
+            // Скрытые проблемы — подробная проверка «Оценки ПК» идёт в фоне
+            if (PcCheck.Last == null)
+                PcCheck.RunInBackground(delegate
+                {
+                    try { if (IsHandleCreated) BeginInvoke(new Action(delegate { if (Visible) BuildChecks(); })); } catch { }
+                });
+            else
+            {
+                List<string> titles = new List<string>(); bool crit = false;
+                foreach (Finding x in PcCheck.Last)
+                    if (x.Hidden && x.Level != Severity.Info) { titles.Add(x.Title); if (x.Level == Severity.Critical) crit = true; }
+                if (titles.Count > 0)
+                {
+                    issues++;
+                    string d = titles.Count <= 2 ? string.Join(". ", titles.ToArray()) + "."
+                        : titles[0] + ". " + titles[1] + ". И ещё " + (titles.Count - 2) + ".";
+                    Check(checkCard, Icons.Warning, crit ? Theme.Red : Theme.Orange,
+                        titles.Count == 1 ? "Найдена скрытая проблема" : "Найдены скрытые проблемы: " + titles.Count,
+                        d, "Посмотреть", delegate { App.Form.Navigate("pc"); });
+                }
+            }
 
             if (!SysInfo.IsAdmin)
                 Check(checkCard, Icons.Shield, Theme.Text2, "Программа запущена без прав администратора", "Часть настроек будет недоступна.", "Перезапустить", delegate { App.Form.RestartAsAdmin(); });
@@ -886,7 +908,7 @@ namespace Tunex
         int detailCpu;               // 0 — процессор этого ПК, дальше — FpsData.TableCpus
         PcProfile profile;
         int gamesGen, popGen;
-        string findTitle = "Узкие места";
+        string findTitle = "Скрытые проблемы";
 
         public PcPage()
         {
@@ -996,21 +1018,22 @@ namespace Tunex
             ThreadPool.QueueUserWorkItem(delegate
             {
                 PcSpecs s = null; List<Finding> f = null; string err = null;
-                try { s = PcCheck.Collect(); f = PcCheck.Analyze(s); } catch (Exception ex) { err = ex.Message; }
+                List<string> passed = new List<string>();
+                try { s = PcCheck.Collect(); f = PcCheck.Analyze(s, passed); PcCheck.Last = f; } catch (Exception ex) { err = ex.Message; }
                 try
                 {
                     BeginInvoke(new Action(delegate
                     {
                         loading = false; loaded = true; again.Enabled = true;
                         if (err != null) { App.Error("Не удалось собрать сведения: " + err); return; }
-                        Fill(s, f);
+                        Fill(s, f, passed);
                     }));
                 }
                 catch { }
             });
         }
 
-        void Fill(PcSpecs s, List<Finding> list)
+        void Fill(PcSpecs s, List<Finding> list, List<string> passed)
         {
             SuspendLayout();
             findCard.Clear(); specCard.Clear();
@@ -1020,8 +1043,8 @@ namespace Tunex
             foreach (Finding x in list) { if (x.Level == Severity.Critical) crit++; else if (x.Level == Severity.Warning) warn++; else info++; }
             if (crit + warn == 0)
             {
-                SettingRow ok = findCard.Add(new SettingRow("Серьёзных узких мест не нашлось",
-                    "Память, диск, экран и питание настроены правильно." + (info > 0 ? " Ниже — советы." : ""), null));
+                SettingRow ok = findCard.Add(new SettingRow("Серьёзных проблем не нашлось",
+                    "Компьютер настроен правильно." + (info > 0 ? " Ниже — советы." : ""), null));
                 ok.Glyph = Icons.Check; ok.GlyphColor = Theme.Green;
             }
             else
@@ -1036,14 +1059,22 @@ namespace Tunex
                 {
                     Finding xx = x;
                     b = new FlatButton(x.Button ?? "Исправить", x.Level == Severity.Critical);
-                    b.Click += delegate { xx.Fix(); if (xx.Glyph == Icons.Display || xx.Glyph == Icons.Power) Load(); };
+                    b.Click += delegate { xx.Fix(); if (xx.Reload) Load(); };
                 }
                 SettingRow r = findCard.Add(new SettingRow(x.Title, x.Text, b));
                 Color c = x.Level == Severity.Critical ? Theme.Red : x.Level == Severity.Warning ? Theme.Orange : Theme.Text2;
                 r.Glyph = x.Glyph; r.GlyphColor = c;
                 r.Badges.Add(new Badge(x.Level == Severity.Critical ? "Мешает играм" : x.Level == Severity.Warning ? "Стоит исправить" : "К сведению", c));
             }
-            findCard.Footer = "Tunex сообщает только о том, что может определить надёжно. Температуру и перегрев покажет стресс-тест — он появится позже.";
+            if (passed.Count > 0)
+            {
+                string all = string.Join(", ", passed.ToArray());
+                SettingRow okRow = findCard.Add(new SettingRow("Проверено — в порядке", char.ToUpper(all[0]) + all.Substring(1) + ".", null));
+                okRow.Glyph = Icons.Check; okRow.GlyphColor = Theme.Green;
+            }
+            findCard.Footer = "Проблемы, которые обычно не видно: монитор не на той частоте или не в том разъёме, игры на медленном диске, драйвер, питание, память, файл подкачки. " +
+                "Tunex сообщает только о том, что может определить надёжно, и ничего не меняет без вашей кнопки.";
+            findCard.Relayout();
 
             // ---- Характеристики
             Spec(Icons.Cpu, "Процессор", s.Cpu,
@@ -1477,11 +1508,26 @@ namespace Tunex
         public LookPage()
         {
             Add(new PageHeader(Icons.Palette, "Оформление", null, null));
+
+            // Тема «Стекло»: как в Windows, светлая или тёмная
+            Add(new SectionLabel("Тема"));
+            JumpBar modes = new JumpBar();
+            modes.Add("system", null, "Как в Windows");
+            modes.Add("light", null, "Светлая");
+            modes.Add("dark", null, "Тёмная");
+            modes.Selected = Theme.Mode;
+            modes.Width = Theme.S(28) * 3 + Theme.S(8) + Theme.Measure("Как в Windows", Theme.FontBodyBold).Width + Theme.Measure("Светлая", Theme.FontBodyBold).Width + Theme.Measure("Тёмная", Theme.FontBodyBold).Width;
+            modes.Jump += delegate(string k) { if (k != Theme.Mode) App.Form.SetThemeMode(k); };
+            Card tc = Add(new Card());
+            SettingRow tr = tc.Add(new SettingRow("Светлая или тёмная",
+                Theme.Mode == "system" ? "Сейчас как в Windows: " + (Theme.Dark ? "тёмная" : "светлая") + "." : "Тема меняется сразу.", modes));
+            tr.Glyph = Theme.Dark ? Icons.Moon : Icons.Sun; tr.GlyphColor = Theme.Accent;
+
             Add(new SectionLabel("Цвет акцента"));
             Add(new AccentPicker());
             Card c = Add(new Card());
             SettingRow r = c.Add(new SettingRow("Цвет меняется сразу",
-                "Им подсвечиваются кнопки, переключатели, активный раздел и графики. Цвета состояний настроек (красный, жёлтый, зелёный) не меняются, чтобы их было легко различать.", null));
+                "Им подсвечиваются главные кнопки, выбранный раздел и графики. Включённые переключатели всегда зелёные, а цвета состояний настроек (красный, жёлтый, зелёный) не меняются, чтобы их было легко различать.", null));
             r.Glyph = Icons.Info; r.GlyphColor = Theme.Text2;
         }
     }
@@ -1534,24 +1580,26 @@ namespace Tunex
             {
                 Rectangle t = Tile(i);
                 RectangleF rf = new RectangleF(t.X + 0.5f, t.Y + 0.5f, t.Width - 1, t.Height - 1);
-                Theme.FillRound(g, i == hover ? Theme.CardHover : Theme.Card, rf, 2);
-                Theme.DrawRound(g, i == sel ? Theme.Accent : Theme.Border, rf, 2, i == sel ? Theme.Sf(2) : 1f);
+                Theme.PaintCard(g, rf, Theme.Sf(14));
+                if (i == hover) Theme.FillRound(g, Theme.CardInner, rf, Theme.Sf(14));
+                if (i == sel) Theme.DrawRound(g, Theme.Accent, new RectangleF(rf.X + 0.5f, rf.Y + 0.5f, rf.Width - 1, rf.Height - 1), Theme.Sf(13.5f), Theme.Sf(2));
                 int p = Theme.S(14);
                 Rectangle sw = new Rectangle(t.X + p, t.Y + p, t.Width - p * 2, Theme.S(46));
                 if (i < 3)
-                    using (SolidBrush b = new SolidBrush(Theme.Presets[i])) g.FillRectangle(b, sw);
+                    Theme.FillRound(g, Theme.Presets[i], sw, Theme.Sf(10));
                 else
                 {
-                    // Радуга для «своего цвета»; если выбран свой — он сам
-                    if (!preset) using (SolidBrush b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, sw);
+                    // Радуга системных цветов для «своего цвета»; если выбран свой — он сам
+                    if (!preset) Theme.FillRound(g, Theme.Accent, sw, Theme.Sf(10));
                     else
                         using (LinearGradientBrush lb = new LinearGradientBrush(sw, Color.Red, Color.Blue, 0f))
+                        using (GraphicsPath sp = Theme.RoundPath(sw, Theme.Sf(10)))
                         {
                             ColorBlend cb = new ColorBlend();
-                            cb.Colors = new Color[] { Color.FromArgb(240, 96, 78), Color.FromArgb(240, 200, 64), Color.FromArgb(120, 220, 100), Color.FromArgb(77, 201, 220), Color.FromArgb(120, 120, 255), Color.FromArgb(220, 110, 220) };
+                            cb.Colors = new Color[] { Theme.Red, Theme.Orange, Theme.Green, Theme.Blue, Theme.Accent, Theme.Purple };
                             cb.Positions = new float[] { 0f, 0.2f, 0.4f, 0.6f, 0.8f, 1f };
                             lb.InterpolationColors = cb;
-                            g.FillRectangle(lb, sw);
+                            g.FillPath(lb, sp);
                         }
                 }
                 string name = i < 3 ? Theme.PresetNames[i] : "Свой цвет";
@@ -1806,7 +1854,7 @@ namespace Tunex
             Theme.DrawText(g, e.When.ToString("HH:mm"), Theme.FontBodyBold, Theme.Text2, new Rectangle(Pad, y, TimeW, th), TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             // Значок вида изменения
             Rectangle tile = new Rectangle(Pad + TimeW, y + (th - Tile) / 2, Tile, Tile);
-            Theme.FillRound(g, Theme.Alpha(color, 36), tile, Theme.Sf(4));
+            Theme.FillRound(g, Theme.Alpha(color, 36), tile, Theme.Sf(8));
             Theme.Glyph(g, glyph, Theme.FontIconSmall, color, tile);
 
             // Заголовок и метка вида
@@ -1818,7 +1866,7 @@ namespace Tunex
             if (bx + bw <= TextX + tw)
             {
                 Rectangle br = new Rectangle(bx, y + (Theme.Measure("Ag", Theme.FontCellTitle).Height - bh) / 2, bw, bh);
-                Theme.FillRound(g, Theme.Alpha(color, 36), br, Theme.Sf(3));
+                Theme.FillRound(g, Theme.Alpha(color, 38), br, br.Height / 2f);
                 Theme.DrawText(g, badge, Theme.FontSmallBold, color, br, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 if (e.NeedsReboot && !e.Undone)
                 {
@@ -1827,7 +1875,7 @@ namespace Tunex
                     Rectangle rr = new Rectangle(br.Right + Theme.S(6), br.Y, rw, bh);
                     if (rr.Right <= TextX + tw)
                     {
-                        Theme.FillRound(g, Theme.Alpha(Theme.Purple, 36), rr, Theme.Sf(3));
+                        Theme.FillRound(g, Theme.Alpha(Theme.Purple, 38), rr, rr.Height / 2f);
                         Theme.DrawText(g, rb, Theme.FontSmallBold, Theme.Purple, rr, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                     }
                 }
@@ -1843,7 +1891,7 @@ namespace Tunex
                 for (int i = 0; i < chips.Count; i++)
                 {
                     Rectangle r = rects[i]; r.Offset(TextX, y);
-                    Theme.FillRound(g, Theme.Alpha(chips[i].Value, 26), r, Theme.Sf(3));
+                    Theme.FillRound(g, Theme.Alpha(chips[i].Value, 30), r, r.Height / 2f);
                     Theme.DrawText(g, chips[i].Key, Theme.FontSmallBold, chips[i].Value, r, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
                 }
                 y += ch;

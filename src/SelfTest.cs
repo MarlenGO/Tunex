@@ -68,6 +68,17 @@ namespace Tunex
                     check(Backups.Original() != null, "«Как было до Tunex» запомнено");
                 }
 
+                // Замер FPS: подсчёт на искусственных кадрах (ровные 100 FPS и три рывка по 80 мс)
+                {
+                    List<float> ms = new List<float>();
+                    for (int i = 0; i < 6000; i++) ms.Add(i % 2000 == 1000 ? 80f : 10f);
+                    FpsRun fr = FpsRun.Compute("test", ms.ToArray());
+                    check(fr != null && Math.Abs(fr.Avg - 99.65f) < 0.1f && fr.Stutters == 3 && Math.Abs(fr.Low1 - 100) < 0.5f && fr.Graph.Length >= 50,
+                        "замер FPS считается: средний " + (fr != null ? fr.Avg.ToString("0.0") : "—") + ", рывков " + (fr != null ? fr.Stutters : -1));
+                    check(FpsCapture.IsNotGame("C:\\x\\msedge.exe") && FpsCapture.IsNotGame("Tunex.exe") && !FpsCapture.IsNotGame("cs2.exe"), "браузеры и сам Tunex не считаются игрой");
+                    log.AppendLine("      PresentMon скачан: " + PresentMon.Installed);
+                }
+
                 // Автообновление: номера версий, ответ GitHub, подмена файла (на копии во временной папке, без интернета)
                 {
                     check(Updater.Parse("v0.2") > Updater.Parse("0.1") && Updater.Parse("v1.0.1") > Updater.Parse("1.0") && Updater.Parse("0.1") == Updater.Parse("v0.1.0") && Updater.Parse("beta") == null,
@@ -148,10 +159,15 @@ namespace Tunex
                     PcSpecs ps = PcCheck.Collect();
                     check(ps.Ram.Count > 0 && ps.Disks.Count > 0 && ps.Gpus.Count > 0, "оценка ПК: память " + ps.Ram.Count + " шт., дисков " + ps.Disks.Count + ", видеокарт " + ps.Gpus.Count + ", экранов " + ps.Monitors.Count);
                     foreach (MemInfo mi in ps.Ram) log.AppendLine("      память: " + PcCheck.Gb(mi.Capacity) + " " + mi.TypeName + " " + mi.Configured + "/" + mi.Speed + " МГц, слот «" + mi.Locator + "», канал " + (mi.ChannelKey ?? "?"));
-                    foreach (DiskInfo di in ps.Disks) log.AppendLine("      диск: " + di.Name + " — " + di.Kind + (di.System ? ", системный, свободно " + PcCheck.Gb(di.Free) : ""));
-                    foreach (MonitorInfo mo in ps.Monitors) log.AppendLine("      экран: " + mo.Name + " " + mo.Hz + "/" + mo.MaxHz + " Гц");
-                    log.AppendLine("      ноутбук: " + ps.Laptop + ", от батареи: " + ps.OnBattery);
-                    foreach (Finding fi in PcCheck.Analyze(ps)) log.AppendLine("      узкое место [" + fi.Level + "]: " + fi.Title);
+                    foreach (DiskInfo di in ps.Disks) log.AppendLine("      диск: " + di.Name + " — " + di.Kind + " [" + di.Letters + "]" + (di.Free >= 0 ? ", свободно " + PcCheck.Gb(di.Free) : "") + (di.System ? ", системный" : ""));
+                    foreach (MonitorInfo mo in ps.Monitors) log.AppendLine("      экран: " + mo.Name + " " + mo.Hz + "/" + mo.MaxHz + " Гц, подключён к «" + mo.Adapter + "»");
+                    foreach (GpuInfo gi in ps.Gpus) log.AppendLine("      видеокарта: " + gi.Name + (gi.Integrated ? " (встроенная)" : "") + ", код устройства " + gi.Error);
+                    log.AppendLine("      ноутбук: " + ps.Laptop + ", от батареи: " + ps.OnBattery + ", экономия заряда: " + ps.BatterySaver + ", режим энергоэффективности: " + ps.EfficiencyMode);
+                    log.AppendLine("      файл подкачки выключен: " + ps.PagefileOff + " (известно: " + ps.PagefileKnown + "), Wi-Fi при свободном кабеле: " + ps.WifiWithPort + ", без драйвера: " + ps.BasicAdapter);
+                    log.AppendLine("      игр найдено: " + ps.Games.Count);
+                    List<string> passedReal = new List<string>();
+                    foreach (Finding fi in PcCheck.Analyze(ps, passedReal)) log.AppendLine("      проблема [" + fi.Level + (fi.Hidden ? ", скрытая" : "") + "]: " + fi.Title);
+                    log.AppendLine("      в порядке: " + string.Join(", ", passedReal.ToArray()));
                     // Правила на выдуманных данных: одна планка + встроенная графика, HDD, 60 из 144 Гц
                     PcSpecs fake = new PcSpecs(); fake.Threads = 8;
                     MemInfo one = new MemInfo(); one.Capacity = 8L << 30; one.Speed = 3200; one.Configured = 2400; one.Type = 26; fake.Ram.Add(one);
@@ -162,6 +178,20 @@ namespace Tunex
                     check(all.Contains("[Critical] Память работает в одноканальном") && all.Contains("[Critical] Windows стоит на жёстком") && all.Contains("[Critical] Монитор работает на 60")
                         && all.Contains("[Warning] Память работает на 2400") && all.Contains("[Warning] На системном диске мало места") && all.Contains("[Warning] Оперативной памяти 8 ГБ"),
                         "правила узких мест на выдуманном ПК: " + all);
+                    // Скрытые проблемы: монитор в материнской плате, игры на HDD при SSD, выключенный файл подкачки, нет драйвера, Wi-Fi
+                    PcSpecs hid = HiddenDemo();
+                    List<string> hidOk = new List<string>();
+                    string hidAll = ""; int hidden = 0;
+                    foreach (Finding fi in PcCheck.Analyze(hid, hidOk)) { hidAll += "[" + fi.Level + "] " + fi.Title + "; "; if (fi.Hidden) hidden++; }
+                    check(hidAll.Contains("[Critical] Монитор подключён к материнской плате") && hidAll.Contains("[Warning] Игры лежат на жёстком диске, хотя есть SSD")
+                        && hidAll.Contains("[Critical] Файл подкачки выключен") && hidAll.Contains("[Critical] Не установлен драйвер видеокарты")
+                        && hidAll.Contains("[Critical] Видеокарта отключена: AMD Radeon RX 580") && hidAll.Contains("[Info] Интернет по Wi-Fi") && !hidAll.Contains("Жёсткий диск: ST2000")
+                        && hidden == 6 && hidOk.Contains("частота экрана") && hidOk.Contains("питание") && !hidOk.Contains("кабель монитора"),
+                        "скрытые проблемы на выдуманном ПК: " + hidAll + " в порядке: " + string.Join(", ", hidOk.ToArray()));
+                    // Ноутбук: внутренний экран на встроенной графике — это нормально
+                    hid.Laptop = true;
+                    check(!string.Join(";", Titles(PcCheck.Analyze(hid))).Contains("материнской плате"), "ноутбук: экран на встроенной графике не считается ошибкой");
+
                     MemInfo a1 = new MemInfo(); a1.Locator = "DIMM_A1"; MemInfo a2 = new MemInfo(); a2.Locator = "DIMM_A2"; MemInfo b2 = new MemInfo(); b2.Locator = "DIMM_B2";
                     check(a1.ChannelKey == a2.ChannelKey && a1.ChannelKey != b2.ChannelKey, "каналы памяти по названию слотов: A1=" + a1.ChannelKey + " A2=" + a2.ChannelKey + " B2=" + b2.ChannelKey);
                 }
@@ -272,6 +302,29 @@ namespace Tunex
             catch (Exception ex) { log.AppendLine("FAIL  исключение: " + ex); fails++; }
             log.AppendLine(fails == 0 ? "ИТОГ: всё прошло" : "ИТОГ: ошибок " + fails);
             File.WriteAllText(reportPath, log.ToString(), Encoding.UTF8);
+        }
+
+        static List<string> Titles(List<Finding> list)
+        {
+            List<string> t = new List<string>();
+            foreach (Finding f in list) t.Add(f.Title);
+            return t;
+        }
+
+        // Выдуманный ПК со скрытыми проблемами — для самопроверки и для просмотра интерфейса (--pcdemo)
+        public static PcSpecs HiddenDemo()
+        {
+            PcSpecs hid = new PcSpecs(); hid.Threads = 12;
+            GpuInfo hi = new GpuInfo(); hi.Name = "Intel(R) UHD Graphics 770"; hi.Integrated = true; hid.Gpus.Add(hi);
+            GpuInfo hd2 = new GpuInfo(); hd2.Name = "NVIDIA GeForce RTX 3060"; hd2.DriverDate = DateTime.Now.AddDays(-30); hid.Gpus.Add(hd2);
+            GpuInfo off = new GpuInfo(); off.Name = "AMD Radeon RX 580"; off.Error = 22; hid.Gpus.Add(off);
+            MonitorInfo hm = new MonitorInfo(); hm.Name = "Samsung"; hm.Device = "\\\\.\\DISPLAY8"; hm.Hz = 144; hm.Rates.Add(144); hm.Adapter = "Intel(R) UHD Graphics 770"; hid.Monitors.Add(hm);
+            DiskInfo sd = new DiskInfo(); sd.Name = "Samsung 980"; sd.Ssd = true; sd.System = true; sd.Letters = "C"; sd.Size = 1L << 40; sd.Free = 400L << 30; hid.Disks.Add(sd);
+            DiskInfo hh = new DiskInfo(); hh.Name = "ST2000"; hh.Hdd = true; hh.Letters = "D"; hh.Size = 2L << 40; hid.Disks.Add(hh);
+            foreach (string gn in new string[] { "Cyberpunk 2077", "Rust", "Dota 2", "Elden Ring" }) { GameSpot gs = new GameSpot(); gs.Name = gn; gs.Letter = 'D'; hid.Games.Add(gs); }
+            GameSpot gc = new GameSpot(); gc.Name = "Counter-Strike 2"; gc.Letter = 'C'; hid.Games.Add(gc);
+            hid.PagefileKnown = true; hid.PagefileOff = true; hid.BasicAdapter = true; hid.WifiWithPort = true; hid.NetKnown = true;
+            return hid;
         }
     }
 }

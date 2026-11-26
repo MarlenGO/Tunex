@@ -25,7 +25,7 @@ namespace Tunex
 
         public ToggleSwitch()
         {
-            Size = new Size(Theme.S(44), Theme.S(24));
+            Size = new Size(Theme.S(42), Theme.S(25));
             Cursor = Cursors.Hand;
             anim.Interval = 15;
             anim.Tick += delegate
@@ -57,13 +57,15 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Color track = Theme.Blend(Theme.ToggleOff, Theme.Accent, pos);
-            if (!Enabled) track = Theme.Blend(track, Theme.CardInner, 0.6f);
+            // GlassWise: дорожка серая, включённая — зелёная; белый круглый бегунок с тенью
+            Color track = Theme.Blend(Theme.ToggleOff, Theme.Green, pos);
+            if (!Enabled) track = Theme.Alpha(track, Math.Max(20, track.A * 2 / 5));
             Theme.FillRound(g, track, r, r.Height / 2);
-            float d = Height - Theme.Sf(8);
-            float x = Theme.Sf(4) + pos * (Width - Theme.Sf(8) - d);
-            Color knob = !Enabled ? Color.FromArgb(140, 139, 132) : Theme.Blend(Color.FromArgb(236, 235, 230), Theme.OnAccent, pos);
-            Theme.FillRound(g, knob, new RectangleF(x, Theme.Sf(4) - 0.5f, d, d), Theme.Sf(2));
+            float d = Height - Theme.Sf(4);
+            float x = Theme.Sf(2) + pos * (Width - Theme.Sf(4) - d);
+            RectangleF k = new RectangleF(x, Theme.Sf(2) - 0.5f, d, d);
+            using (SolidBrush sh = new SolidBrush(Color.FromArgb(Enabled ? 45 : 18, 0, 0, 0))) g.FillEllipse(sh, k.X, k.Y + Theme.Sf(1.5f), k.Width, k.Height);
+            using (SolidBrush kb = new SolidBrush(Enabled ? Color.White : Color.FromArgb(Theme.Dark ? 120 : 235, 255, 255, 255))) g.FillEllipse(kb, k);
         }
 
         protected override void Dispose(bool disposing) { if (disposing) anim.Dispose(); base.Dispose(disposing); }
@@ -83,7 +85,7 @@ namespace Tunex
             Font = Theme.FontBodyBold;
             Primary = primary; Glyph = glyph;
             Cursor = Cursors.Hand;
-            Height = Theme.S(34);
+            Height = Theme.S(36);
             Text = text;
         }
 
@@ -104,13 +106,13 @@ namespace Tunex
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
+            // GlassWise: круглая кнопка; главное действие — сплошной акцент, остальные — серая заливка без рамки
             Color bg = Primary ? Theme.Accent : Theme.Button;
-            if (!Enabled) bg = Theme.Blend(bg, Theme.Card, 0.55f);
-            else if (down) bg = Theme.Blend(bg, Color.Black, 0.15f);
-            else if (hover) bg = Primary ? Theme.Blend(bg, Color.White, 0.18f) : Theme.CardHover;
+            if (!Enabled) bg = Theme.Alpha(bg, Math.Max(16, bg.A * 2 / 5));
+            else if (down) bg = Primary ? Theme.Blend(bg, Color.Black, 0.12f) : Theme.Alpha(bg, Math.Min(255, bg.A + 30));
+            else if (hover) bg = Primary ? Theme.Blend(bg, Color.White, 0.10f) : Theme.Alpha(bg, Math.Min(255, bg.A + 16));
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             Theme.FillRound(g, bg, r, r.Height / 2);
-            if (!Primary) Theme.DrawRound(g, hover && Enabled ? Theme.Text3 : Theme.ButtonBorder, r, r.Height / 2, 1f);
             Color fg = !Enabled ? Theme.Text3 : Primary ? Theme.OnAccent : Theme.Text;
             if (Glyph != null)
             {
@@ -127,7 +129,7 @@ namespace Tunex
 
     class IconButton : BufferedControl
     {
-        public string Glyph; public Color HoverColor = Color.FromArgb(28, 255, 255, 255);
+        public string Glyph; public Color HoverColor = Theme.CardInner;
         public Color GlyphColor = Theme.Text2;
         bool hover;
         public IconButton(string glyph, int size)
@@ -139,8 +141,8 @@ namespace Tunex
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
-            if (hover) Theme.FillRound(g, HoverColor, new RectangleF(0, 0, Width - 1, Height - 1), Theme.Sf(8));
-            Theme.Glyph(g, Glyph, Theme.FontIconSmall, hover ? Theme.Text : GlyphColor, ClientRectangle);
+            if (hover) Theme.FillRound(g, HoverColor, new RectangleF(0, 0, Width - 1, Height - 1), Height / 2f);
+            Theme.Glyph(g, Glyph, Theme.FontIconSmall, hover ? Theme.Accent : GlyphColor, ClientRectangle);
         }
     }
 
@@ -153,18 +155,16 @@ namespace Tunex
         {
             base.OnTextChanged(e);
             Size s = Theme.Measure(Text, Font);
-            Size = new Size(s.Width + Theme.S(32), s.Height + Theme.S(10));
+            Size = new Size(s.Width + Theme.S(20), s.Height + Theme.S(8));
             Invalidate();
         }
+        // GlassWise gw-chip: мягкая заливка цветом метки и текст тем же цветом
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
-            RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.Alpha(Tint, 22), r, 2);
-            Theme.DrawRound(g, Theme.Alpha(Tint, 110), r, 2, 1f);
-            float d = Theme.Sf(6);
-            using (SolidBrush b = new SolidBrush(Tint)) g.FillRectangle(b, Theme.Sf(10), (Height - d) / 2f, d, d);
-            Theme.DrawText(g, Text, Font, Tint, new Rectangle(Theme.S(22), 0, Width - Theme.S(28), Height), TextFormatFlags.VerticalCenter);
+            RectangleF r = new RectangleF(0, 0, Width - 1, Height - 1);
+            Theme.FillRound(g, Theme.Alpha(Tint, 40), r, r.Height / 2);
+            Theme.DrawText(g, Text, Font, Tint, ClientRectangle, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
 
@@ -217,10 +217,12 @@ namespace Tunex
             Theme.FillRound(g, Theme.ToggleOff, t, t.Height / 2f);
             RectangleF fill = new RectangleF(t.X, t.Y, t.Width * f, t.Height);
             if (fill.Width > 1) Theme.FillRound(g, Enabled ? Theme.Accent : Theme.Text3, fill, t.Height / 2f);
-            float kw = Theme.Sf(6), kh = Theme.Sf(18);
+            float kd = Theme.Sf(20);
             float cx = t.X + t.Width * f;
-            using (SolidBrush b = new SolidBrush(Enabled ? Theme.Text : Theme.Text3))
-                g.FillRectangle(b, cx - kw / 2, Height / 2f - kh / 2, kw, kh);
+            RectangleF kr = new RectangleF(cx - kd / 2, Height / 2f - kd / 2, kd, kd);
+            using (SolidBrush sh = new SolidBrush(Color.FromArgb(40, 0, 0, 0))) g.FillEllipse(sh, kr.X, kr.Y + Theme.Sf(1.5f), kd, kd);
+            using (SolidBrush b = new SolidBrush(Enabled ? Color.White : Theme.Text3)) g.FillEllipse(b, kr);
+            using (Pen kp = new Pen(Theme.CardEdge)) g.DrawEllipse(kp, kr);
             string s = Format != null ? Format(value) : value.ToString();
             Theme.DrawText(g, s, Theme.FontNum, Enabled ? Theme.Text : Theme.Text3,
                 new Rectangle(Width - Theme.S(62), 0, Theme.S(62), Height), TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
@@ -228,25 +230,33 @@ namespace Tunex
     }
 
     // ---------------------------------------------------------------- Выпадающий список
+    // Всплывающее меню GlassWise (gw-menu): белое (в тёмной теме — графитовое) окно, пункты со скруглённой подсветкой
     class DarkColors : ProfessionalColorTable
     {
-        public override Color MenuItemSelected { get { return Theme.CardHover; } }
-        public override Color MenuItemBorder { get { return Theme.CardHover; } }
-        public override Color MenuBorder { get { return Theme.Border; } }
-        public override Color ToolStripDropDownBackground { get { return Theme.CardInner; } }
-        public override Color ImageMarginGradientBegin { get { return Theme.CardInner; } }
-        public override Color ImageMarginGradientMiddle { get { return Theme.CardInner; } }
-        public override Color ImageMarginGradientEnd { get { return Theme.CardInner; } }
-        public override Color MenuItemSelectedGradientBegin { get { return Theme.CardHover; } }
-        public override Color MenuItemSelectedGradientEnd { get { return Theme.CardHover; } }
-        public override Color MenuItemPressedGradientBegin { get { return Theme.CardHover; } }
-        public override Color MenuItemPressedGradientEnd { get { return Theme.CardHover; } }
+        public override Color MenuItemSelected { get { return Theme.PopHover; } }
+        public override Color MenuItemBorder { get { return Theme.PopHover; } }
+        public override Color MenuBorder { get { return Theme.Frame; } }
+        public override Color ToolStripDropDownBackground { get { return Theme.Pop; } }
+        public override Color ImageMarginGradientBegin { get { return Theme.Pop; } }
+        public override Color ImageMarginGradientMiddle { get { return Theme.Pop; } }
+        public override Color ImageMarginGradientEnd { get { return Theme.Pop; } }
+        public override Color MenuItemSelectedGradientBegin { get { return Theme.PopHover; } }
+        public override Color MenuItemSelectedGradientEnd { get { return Theme.PopHover; } }
+        public override Color MenuItemPressedGradientBegin { get { return Theme.PopHover; } }
+        public override Color MenuItemPressedGradientEnd { get { return Theme.PopHover; } }
     }
 
     class DarkRenderer : ToolStripProfessionalRenderer
     {
         public DarkRenderer() : base(new DarkColors()) { RoundedEdges = false; }
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) { e.TextColor = Theme.Text; base.OnRenderItemText(e); }
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!e.Item.Selected || !e.Item.Enabled) return;
+            Theme.Smooth(e.Graphics);
+            Rectangle r = new Rectangle(Theme.S(4), 1, e.Item.Width - Theme.S(8), e.Item.Height - 2);
+            Theme.FillRound(e.Graphics, Theme.PopHover, r, Theme.Sf(8));
+        }
     }
 
     class DarkDropdown : BufferedControl
@@ -273,13 +283,14 @@ namespace Tunex
             m.Renderer = new DarkRenderer();
             m.ShowImageMargin = false;
             m.Font = Theme.FontBody;
-            m.BackColor = Theme.CardInner;
+            m.BackColor = Theme.Pop;
+            m.Padding = new Padding(0, Theme.S(4), 0, Theme.S(4));
             for (int i = 0; i < Items.Count; i++)
             {
                 int idx = i;
                 ToolStripItem it = m.Items.Add(Items[i]);
                 it.ForeColor = Theme.Text;
-                it.Padding = new Padding(Theme.S(6), Theme.S(5), Theme.S(6), Theme.S(5));
+                it.Padding = new Padding(Theme.S(8), Theme.S(6), Theme.S(8), Theme.S(6));
                 if (i == selected) it.Font = Theme.FontBodyBold;
                 it.AutoSize = true;
                 it.Click += delegate
@@ -298,8 +309,8 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, hover && Enabled ? Theme.CardHover : Theme.Button, r, Theme.Sf(10));
-            Theme.DrawRound(g, hover && Enabled ? Theme.Text3 : Theme.ButtonBorder, r, Theme.Sf(10), 1f);
+            // gw-dd: серая заливка, при наведении темнее, без рамки
+            Theme.FillRound(g, hover && Enabled ? Theme.CardHover : Theme.CardInner, r, Theme.Sf(10));
             string s = selected >= 0 && selected < Items.Count ? Items[selected] : "—";
             Theme.DrawText(g, s, Font, Enabled ? Theme.Text : Theme.Text3, new Rectangle(Theme.S(14), 0, Width - Theme.S(44), Height), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             Theme.Glyph(g, Icons.Chevron, Theme.FontIconSmall, Theme.Text2, new Rectangle(Width - Theme.S(34), 0, Theme.S(24), Height));
@@ -394,7 +405,7 @@ namespace Tunex
                 int bw = bs.Width + Theme.S(14), bh = bs.Height + Theme.S(4);
                 if (bx + bw > TextLeft + tw) break;
                 Rectangle br = new Rectangle(bx, y + (Theme.Measure("Ag", TitleFont).Height - bh) / 2, bw, bh);
-                Theme.FillRound(g, Theme.Alpha(b.Color, 40), br, bh / 2f);
+                Theme.FillRound(g, Theme.Alpha(b.Color, 38), br, bh / 2f);
                 Theme.DrawText(g, b.Text, Theme.FontSmallBold, b.Color, br, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 bx += bw + Theme.S(6);
             }
@@ -408,7 +419,7 @@ namespace Tunex
     {
         readonly List<RowBase> rows = new List<RowBase>();
         public string Footer;
-        public Color BorderColor = Theme.Border;
+        public Color BorderColor = Theme.CardEdge;
         int footerTop = -1, lastWidth = -1;
 
         public Card() { }
@@ -471,24 +482,24 @@ namespace Tunex
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             Theme.FillRound(g, Theme.Card, r, Theme.Sf(14));
             Theme.DrawRound(g, BorderColor, r, Theme.Sf(14), 1f);
+            // Тонкие разделители с отступом слева, как в gw-list
             using (Pen sep = new Pen(Theme.Border))
-                foreach (int y in separators) g.DrawLine(sep, 1, y, Width - 2, y);
+                foreach (int y in separators) g.DrawLine(sep, Theme.S(18), y, Width - 2, y);
             if (footerTop >= 0)
-                Theme.DrawText(g, Footer, Theme.FontSmall, Theme.Text3,
+                Theme.DrawText(g, Footer, Theme.FontSmall, Theme.Text2,
                     new Rectangle(Theme.S(24), footerTop, Width - Theme.S(48), Height - footerTop), TextFormatFlags.WordBreak);
         }
     }
 
     class SectionLabel : BufferedControl
     {
-        public SectionLabel(string text) { Text = text; Font = Theme.FontH2; Height = Theme.S(30); }
+        // gw-sec: подпись раздела обычными буквами, полужирная, серым
+        public SectionLabel(string text) { Text = text; Font = Theme.FontLabel; Height = Theme.S(30); }
         protected override void OnPaint(PaintEventArgs e)
         {
-            string t = Text.ToUpperInvariant();
-            Size s = Theme.Measure(t, Font);
-            int y = Height - Theme.S(6) - s.Height;
-            Theme.DrawText(e.Graphics, t, Font, Theme.Text2, new Rectangle(0, y, s.Width + 4, s.Height), TextFormatFlags.Left);
-            using (Pen p = new Pen(Theme.Border)) e.Graphics.DrawLine(p, s.Width + Theme.S(14), y + s.Height / 2, Width, y + s.Height / 2);
+            Size s = Theme.Measure(Text, Font);
+            int y = Height - Theme.S(4) - s.Height;
+            Theme.DrawText(e.Graphics, Text, Font, Theme.Text2, new Rectangle(Theme.S(4), y, Width - Theme.S(4), s.Height), TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
         }
     }
 
@@ -503,27 +514,17 @@ namespace Tunex
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
-            int x = 0;
-            if (Number != null)
-            {
-                Size ns = Theme.Measure(Number, Theme.FontH2);
-                Theme.DrawText(g, Number, Theme.FontH2, Theme.Accent, new Rectangle(x, 0, ns.Width + Theme.S(4), Height), TextFormatFlags.VerticalCenter);
-                x += ns.Width + Theme.S(12);
-            }
-            string t = Title.ToUpperInvariant();
+            // GlassWise: заголовок обычными буквами и пояснение серым, без номеров и линий
+            int x = Theme.S(2);
+            string t = Title;
             Size ts = Theme.Measure(t, Theme.FontH2);
             Theme.DrawText(g, t, Theme.FontH2, Theme.Text, new Rectangle(x, 0, ts.Width + Theme.S(4), Height), TextFormatFlags.VerticalCenter);
-            x += ts.Width + Theme.S(16);
+            x += ts.Width + Theme.S(12);
             if (!string.IsNullOrEmpty(Subtitle))
             {
-                Size ss = Theme.Measure(Subtitle, Theme.FontSmall);
-                int sw = Math.Min(ss.Width + Theme.S(4), Math.Max(0, Width - x - Theme.S(40)));
-                Theme.DrawText(g, Subtitle, Theme.FontSmall, Theme.Text3, new Rectangle(x, 0, sw, Height), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                x += sw + Theme.S(16);
+                int sw = Math.Max(0, Width - x);
+                Theme.DrawText(g, Subtitle, Theme.FontSmall, Theme.Text2, new Rectangle(x, Theme.S(2), sw, Height), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }
-            // Линия до правого края
-            if (x < Width)
-                using (Pen p = new Pen(Theme.Border)) g.DrawLine(p, x, Height / 2, Width, Height / 2);
         }
     }
 
@@ -544,16 +545,17 @@ namespace Tunex
             items.Add(it); Relayout();
         }
 
-        string Label(int i) { return (i + 1).ToString("00") + "  " + items[i].Text.ToUpperInvariant(); }
+        string Label(int i) { return items[i].Text; }
 
+        // gw-seg: серая подложка, пункты внутри с отступом 2 px
         void Relayout()
         {
-            int x = 0;
+            int x = Theme.S(2);
             for (int i = 0; i < items.Count; i++)
             {
-                int w = Theme.S(32) + Theme.Measure(Label(i), Theme.FontLabel).Width;
-                items[i].Bounds = new Rectangle(x, 0, w, Height);
-                x += w;
+                int w = Theme.S(28) + Theme.Measure(Label(i), Theme.FontBodyBold).Width;
+                items[i].Bounds = new Rectangle(x, Theme.S(2), w, Height - Theme.S(4));
+                x += w + Theme.S(2);
             }
             Invalidate();
         }
@@ -568,29 +570,27 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             if (items.Count == 0) return;
-            int total = items[items.Count - 1].Bounds.Right;
-            RectangleF strip = new RectangleF(0.5f, 0.5f, total - 1, Height - 1.5f);
-            Theme.FillRound(g, Theme.Card, strip, 2);
-            using (Pen p = new Pen(Theme.Border))
+            int total = items[items.Count - 1].Bounds.Right + Theme.S(2);
+            RectangleF strip = new RectangleF(0, 0, total, Height - 0.5f);
+            Theme.FillRound(g, Theme.CardInner, strip, Theme.Sf(10));
+            for (int i = 0; i < items.Count; i++)
             {
-                for (int i = 0; i < items.Count; i++)
+                Item it = items[i];
+                bool sel = Selected != null && it.Key == Selected;
+                bool on = sel || i == hover;
+                RectangleF b = new RectangleF(it.Bounds.X, it.Bounds.Y, it.Bounds.Width, it.Bounds.Height);
+                if (sel)
                 {
-                    Item it = items[i];
-                    bool on = i == hover || (Selected != null && it.Key == Selected);
-                    if (on)
-                    {
-                        using (SolidBrush hb = new SolidBrush(Theme.CardHover)) g.FillRectangle(hb, it.Bounds.X + 1, 1, it.Bounds.Width - 1, Height - 2);
-                        using (SolidBrush ab = new SolidBrush(Theme.Accent)) g.FillRectangle(ab, it.Bounds.X + 1, Height - Theme.S(3), it.Bounds.Width - 1, Theme.S(2));
-                    }
-                    if (i > 0) g.DrawLine(p, it.Bounds.X, Theme.S(8), it.Bounds.X, Height - Theme.S(8));
-                    string num = (i + 1).ToString("00");
-                    int nw = Theme.Measure(num + "  ", Theme.FontLabel).Width;
-                    Theme.DrawText(g, num, Theme.FontLabel, on ? Theme.Accent : Theme.Text3, new Rectangle(it.Bounds.X + Theme.S(16), 0, nw, Height), TextFormatFlags.VerticalCenter);
-                    Theme.DrawText(g, it.Text.ToUpperInvariant(), Theme.FontLabel, on ? Theme.Text : Theme.Text2,
-                        new Rectangle(it.Bounds.X + Theme.S(16) + nw, 0, it.Bounds.Width - nw - Theme.S(16), Height), TextFormatFlags.VerticalCenter);
+                    // Белый бегунок выбранного пункта с лёгкой тенью
+                    using (GraphicsPath sp = Theme.RoundPath(new RectangleF(b.X, b.Y + Theme.Sf(1), b.Width, b.Height), Theme.Sf(8)))
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(Theme.Dark ? 60 : 22, 0, 0, 0))) g.FillPath(sb, sp);
+                    Theme.FillRound(g, Theme.Dark ? Theme.Seg : Color.White, b, Theme.Sf(8));
                 }
+                else if (i == hover)
+                    Theme.FillRound(g, Theme.CardInner, b, Theme.Sf(8));
+                Theme.DrawText(g, it.Text, sel ? Theme.FontBodyBold : Theme.FontNav, on ? Theme.Text : Theme.Text2,
+                    it.Bounds, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
-            Theme.DrawRound(g, Theme.Border, strip, 2, 1f);
         }
     }
 
@@ -631,9 +631,6 @@ namespace Tunex
                 Theme.DrawText(g, Subtitle, Theme.FontBody, Theme.Text2, new Rectangle(0, y, TextWidth(Width), sh), TextFormatFlags.WordBreak);
                 y += sh + Theme.S(4);
             }
-            y = Height - Theme.S(4);
-            using (Pen p = new Pen(Theme.Border)) g.DrawLine(p, 0, y, Width, y);
-            using (SolidBrush b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, 0, y - Theme.S(1), Theme.S(36), Theme.S(3));
         }
     }
 
@@ -650,7 +647,7 @@ namespace Tunex
             BackColor = Theme.Bg;
             DoubleBuffered = true;
             Padding = new Padding(Theme.S(26), Theme.S(20), Theme.S(22), Theme.S(10));
-            spacer = new Control(); spacer.Height = Theme.S(40); spacer.Margin = new Padding(0); spacer.BackColor = Theme.Bg;
+            spacer = new BufferedControl(); spacer.Height = Theme.S(40); spacer.Margin = new Padding(0);
             Controls.Add(spacer);
         }
 
@@ -662,7 +659,16 @@ namespace Tunex
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            Native.SetWindowTheme(Handle, "DarkMode_Explorer", null);
+            Native.SetWindowTheme(Handle, Theme.Dark ? "DarkMode_Explorer" : "Explorer", null);
+        }
+
+        // Фон со свечением привязан к окну, а не к содержимому: при прокрутке перерисовываем всё
+        protected override void OnPaintBackground(PaintEventArgs e) { Theme.PaintBackdrop(e.Graphics, this, ClientRectangle); }
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == 0x115 || m.Msg == 0x20A) Invalidate(true);   // WM_VSCROLL, WM_MOUSEWHEEL
         }
 
         // Пустой блок в самом конце: FlowLayoutPanel не учитывает нижний отступ при прокрутке, и последний блок «обрезался»
@@ -720,10 +726,9 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.Card, r, Theme.Sf(18));
-            Theme.DrawRound(g, Theme.Border, r, Theme.Sf(18), 1f);
+            Theme.PaintCard(g, r, Theme.Sf(14));
             int p = Theme.S(14);
-            using (SolidBrush lb = new SolidBrush(LineColor)) g.FillRectangle(lb, p, p + Theme.S(8), Theme.S(6), Theme.S(6));
+            using (SolidBrush lb = new SolidBrush(LineColor)) g.FillEllipse(lb, p, p + Theme.S(8), Theme.S(7), Theme.S(7));
             Theme.DrawText(g, Theme.Track(Title), Theme.FontLabel, Theme.Text2, new Rectangle(p + Theme.S(14), p, Width - p * 2 - Theme.S(30), Theme.S(22)), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             Theme.Glyph(g, Glyph, Theme.FontIconSmall, Theme.Text3, new Rectangle(Width - p - Theme.S(18), p, Theme.S(18), Theme.S(22)));
             int vy = p + Theme.S(28);
@@ -750,9 +755,9 @@ namespace Tunex
                         g.FillPath(lb, area);
                 }
                 using (Pen grid = new Pen(Theme.Border)) g.DrawLine(grid, chart.X, chart.Bottom, chart.Right, chart.Bottom);
-                using (Pen pen = new Pen(LineColor, Theme.Sf(1.5f)))
+                using (Pen pen = new Pen(LineColor, Theme.Sf(1.75f)))
                 {
-                    pen.LineJoin = LineJoin.Miter;
+                    pen.LineJoin = LineJoin.Round;
                     g.DrawLines(pen, pts);
                 }
             }
@@ -811,8 +816,9 @@ namespace Tunex
             if (host == null) return;
             int maxW = Math.Min(Theme.S(520), host.ClientSize.Width - Theme.S(40));
             Size s = Theme.Measure(text, Font, maxW - Theme.S(60));
-            Size = new Size(Math.Min(maxW, s.Width + Theme.S(64)), s.Height + Theme.S(30));
-            Location = new Point(host.ClientSize.Width - Width - Theme.S(24), host.ClientSize.Height - Height - Theme.S(24));
+            Size = new Size(Math.Min(maxW, s.Width + Theme.S(56)), s.Height + Theme.S(26));
+            // gw-toast: по центру внизу
+            Location = new Point((host.ClientSize.Width - Width) / 2, host.ClientSize.Height - Height - Theme.S(20));
             Visible = true; BringToFront(); Invalidate();
             hide.Stop(); hide.Interval = ms; hide.Start();
         }
@@ -823,10 +829,11 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.CardInner, r, 2);
-            Theme.DrawRound(g, Theme.Border, r, 2, 1f);
-            using (SolidBrush b = new SolidBrush(Tint)) g.FillRectangle(b, 0, 0, Theme.S(3), Height);
-            Theme.DrawText(g, Text, Font, Theme.Text, new Rectangle(Theme.S(22), Theme.S(15), Width - Theme.S(38), Height - Theme.S(26)), TextFormatFlags.WordBreak);
+            Theme.FillRound(g, Theme.Pop, r, Theme.Sf(14));
+            Theme.DrawRound(g, Theme.Frame, r, Theme.Sf(14), 1f);
+            float d = Theme.Sf(8);
+            using (SolidBrush b = new SolidBrush(Tint)) g.FillEllipse(b, Theme.Sf(16), (Height - d) / 2f, d, d);
+            Theme.DrawText(g, Text, Font, Theme.Text, new Rectangle(Theme.S(34), Theme.S(13), Width - Theme.S(48), Height - Theme.S(22)), TextFormatFlags.WordBreak);
         }
     }
 
@@ -839,7 +846,7 @@ namespace Tunex
         {
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
-            BackColor = Theme.Card;
+            BackColor = Theme.Pop;
             ShowInTaskbar = false;
             int w = Theme.S(460);
             Size ts = Theme.Measure(text, Theme.FontBody, w - Theme.S(56));
@@ -847,7 +854,7 @@ namespace Tunex
             Paint += delegate(object s, PaintEventArgs e)
             {
                 Graphics g = e.Graphics; Theme.Smooth(g);
-                using (Pen pen = new Pen(Theme.Border)) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                using (Pen pen = new Pen(Theme.Frame)) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
                 Theme.DrawText(g, title, Theme.FontH2, Theme.Text, new Rectangle(Theme.S(28), Theme.S(24), Width - Theme.S(56), Theme.S(30)), TextFormatFlags.Left);
                 Theme.DrawText(g, text, Theme.FontBody, Theme.Text2, new Rectangle(Theme.S(28), Theme.S(60), Width - Theme.S(56), ts.Height + 4), TextFormatFlags.WordBreak);
             };
@@ -870,6 +877,7 @@ namespace Tunex
         {
             base.OnHandleCreated(e);
             int v = 2; Native.DwmSetWindowAttribute(Handle, 33, ref v, 4);
+            int dark = Theme.Dark ? 1 : 0; Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
         }
 
         public static bool Ask(IWin32Window owner, string title, string text, string yes, string no)

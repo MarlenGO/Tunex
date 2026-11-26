@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Management;
+using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
@@ -14,6 +16,7 @@ namespace Tunex
         public string Name, DriverVersion;
         public DateTime? DriverDate;
         public int Score; public bool Integrated, Known;
+        public int Error;            // код ошибки устройства: 22 — отключено, 43 — сбой драйвера
     }
 
     class MemInfo
@@ -51,6 +54,7 @@ namespace Tunex
     {
         public string Name; public long Size; public bool System, Ssd, Hdd, Nvme, Usb;
         public long Free = -1;
+        public string Letters = "";  // буквы разделов на этом диске, например «CD»
         public string Kind { get { return Usb ? "USB-диск" : Nvme ? "NVMe SSD" : Ssd ? "SSD" : Hdd ? "HDD (жёсткий диск)" : "Диск"; } }
     }
 
@@ -62,10 +66,17 @@ namespace Tunex
         public List<DiskInfo> Disks = new List<DiskInfo>();
         public List<MonitorInfo> Monitors = new List<MonitorInfo>();
         public bool Laptop, OnBattery, SaverPlan;
+        public bool BasicAdapter;           // видеокарта без драйвера («Базовый видеоадаптер»)
+        public bool BatterySaver, EfficiencyMode;
+        public bool PagefileOff, PagefileKnown;
+        public bool NetKnown, WifiWithPort;
+        public List<GameSpot> Games = new List<GameSpot>();
         public long RamTotal { get { long t = 0; foreach (MemInfo m in Ram) t += m.Capacity; return t; } }
         public bool HasDiscrete { get { foreach (GpuInfo g in Gpus) if (!g.Integrated) return true; return false; } }
         public bool HasIntegrated { get { foreach (GpuInfo g in Gpus) if (g.Integrated) return true; return false; } }
     }
+
+    class GameSpot { public string Name; public char Letter; }
 
     enum Severity { Critical, Warning, Info }
 
@@ -74,6 +85,8 @@ namespace Tunex
         public Severity Level;
         public string Glyph, Title, Text, Button;
         public Action Fix;
+        public bool Hidden;   // скрытая проблема — о ней сообщает и «Главная»
+        public bool Reload;   // после исправления проверить заново
     }
 
     static class PcCheck
@@ -81,6 +94,7 @@ namespace Tunex
         // ---- Сбор (WMI медленный — вызывать в фоне)
         public static PcSpecs Collect()
         {
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "--pcdemo") >= 0) return SelfTest.HiddenDemo();
             PcSpecs s = new PcSpecs();
             s.Cpu = SysInfo.CpuName;
             Wmi("SELECT NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed FROM Win32_Processor", delegate(ManagementObject o)
@@ -90,11 +104,14 @@ namespace Tunex
             });
             if (s.Threads == 0) s.Threads = Environment.ProcessorCount;
 
-            Wmi("SELECT Name, DriverVersion, DriverDate FROM Win32_VideoController", delegate(ManagementObject o)
+            Wmi("SELECT Name, DriverVersion, DriverDate, ConfigManagerErrorCode FROM Win32_VideoController", delegate(ManagementObject o)
             {
                 string n = Convert.ToString(o["Name"]);
-                if (n.IndexOf("Basic Display", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Remote", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                if (n.IndexOf("Basic Display", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Базовый видеоадаптер", StringComparison.OrdinalIgnoreCase) >= 0)
+                { if (!SystemInformation.TerminalServerSession) s.BasicAdapter = true; return; }
+                if (n.IndexOf("Remote", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Virtual", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Hyper-V", StringComparison.OrdinalIgnoreCase) >= 0) return;
                 GpuInfo g = new GpuInfo(); g.Name = n; g.DriverVersion = Convert.ToString(o["DriverVersion"]);
+                g.Error = Int(o["ConfigManagerErrorCode"]);
                 try { string d = Convert.ToString(o["DriverDate"]); if (!string.IsNullOrEmpty(d)) g.DriverDate = ManagementDateTimeConverter.ToDateTime(d); } catch { }
                 bool ig; int sc = GpuDb.ScoreOf(n, out ig);
                 g.Known = sc >= 0; g.Integrated = ig; g.Score = sc >= 0 ? sc : 0;
@@ -116,10 +133,14 @@ namespace Tunex
             // Диски: MSFT_PhysicalDisk знает тип (SSD/HDD) и шину; номер системного диска — по разделу C:
             string sysDisk = null;
             string sysLetter = Path.GetPathRoot(Environment.SystemDirectory).Substring(0, 1);
+            Dictionary<string, string> letters = new Dictionary<string, string>();
             WmiNs(@"root\Microsoft\Windows\Storage", "SELECT DriveLetter, DiskNumber FROM MSFT_Partition", delegate(ManagementObject o)
             {
                 object dl = o["DriveLetter"];
-                if (dl != null && Convert.ToChar(dl).ToString().Equals(sysLetter, StringComparison.OrdinalIgnoreCase)) sysDisk = Convert.ToString(o["DiskNumber"]);
+                if (dl == null || Convert.ToChar(dl) == '\0') return;
+                string l = char.ToUpperInvariant(Convert.ToChar(dl)).ToString(), num = Convert.ToString(o["DiskNumber"]);
+                if (l.Equals(sysLetter, StringComparison.OrdinalIgnoreCase)) sysDisk = num;
+                string had; letters.TryGetValue(num, out had); letters[num] = (had ?? "") + l;
             });
             WmiNs(@"root\Microsoft\Windows\Storage", "SELECT FriendlyName, MediaType, BusType, Size, DeviceId, SpindleSpeed FROM MSFT_PhysicalDisk", delegate(ManagementObject o)
             {
@@ -132,13 +153,23 @@ namespace Tunex
                 d.Nvme = bus == 17 || d.Name.IndexOf("NVMe", StringComparison.OrdinalIgnoreCase) >= 0;
                 d.Ssd = media == 4 || d.Nvme || (media == 0 && d.Name.IndexOf("SSD", StringComparison.OrdinalIgnoreCase) >= 0);
                 d.Hdd = !d.Ssd && (media == 3 || (spindle > 0 && spindle < uint.MaxValue));
-                d.System = sysDisk != null && Convert.ToString(o["DeviceId"]) == sysDisk;
+                string id = Convert.ToString(o["DeviceId"]);
+                d.System = sysDisk != null && id == sysDisk;
+                if (id != null && letters.ContainsKey(id)) d.Letters = letters[id];
                 s.Disks.Add(d);
             });
+            // Свободное место на каждом диске (по всем его разделам)
+            foreach (DiskInfo d in s.Disks)
+            {
+                if (d.Letters == "") continue;
+                long free = 0;
+                foreach (char l in d.Letters) { try { DriveInfo di = new DriveInfo(l.ToString()); if (di.IsReady) free += di.AvailableFreeSpace; } catch { } }
+                d.Free = free;
+            }
             try
             {
                 DriveInfo c = new DriveInfo(sysLetter);
-                foreach (DiskInfo d in s.Disks) if (d.System) d.Free = c.AvailableFreeSpace;
+                foreach (DiskInfo d in s.Disks) if (d.System && d.Letters.Length <= 1) d.Free = c.AvailableFreeSpace;
                 if (s.Disks.Count == 0) { DiskInfo d = new DiskInfo(); d.Name = "Системный диск " + sysLetter + ":"; d.Size = c.TotalSize; d.Free = c.AvailableFreeSpace; d.System = true; s.Disks.Add(d); }
             }
             catch { }
@@ -154,32 +185,201 @@ namespace Tunex
             });
             s.OnBattery = s.Laptop && SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
             try { s.SaverPlan = Power.Active() == Power.Saver; } catch { }
+            if (s.Laptop)
+            {
+                PowerStatus ps;
+                try { if (GetSystemPowerStatus(out ps)) s.BatterySaver = ps.SystemStatusFlag == 1; } catch { }
+            }
+            // «Режим питания» в Параметрах Windows: «Лучшая энергоэффективность» тормозит даже от розетки
+            try { s.EfficiencyMode = !s.SaverPlan && !s.OnBattery && Power.OverlaySupported() && Power.Active() == Power.Balanced && Power.Overlay() == Power.OverlayBattery; } catch { }
+
+            // Файл подкачки: если Windows не управляет им сама и ни одного файла нет — он выключен
+            bool auto = true, autoOk = false; int files = 0;
+            Wmi("SELECT AutomaticManagedPagefile FROM Win32_ComputerSystem", delegate(ManagementObject o) { auto = Convert.ToBoolean(o["AutomaticManagedPagefile"]); autoOk = true; });
+            bool usageOk = Wmi("SELECT Name FROM Win32_PageFileUsage", delegate(ManagementObject o) { files++; });
+            s.PagefileKnown = autoOk && usageOk;
+            s.PagefileOff = s.PagefileKnown && !auto && files == 0;
+
+            CollectNetwork(s);
+            CollectGames(s);
             return s;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct PowerStatus { public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag; public int BatteryLifeTime, BatteryFullLifeTime; }
+        [DllImport("kernel32.dll")] static extern bool GetSystemPowerStatus(out PowerStatus st);
+
+        // Интернет по Wi-Fi, хотя есть свободный разъём для кабеля
+        static readonly string[] VirtualNet = { "virtual", "vpn", "tap-", "tap ", "tunnel", "hyper-v", "vmware", "virtualbox", "bluetooth", "loopback", "miniport", "npcap",
+            "wireguard", "wintun", "zerotier", "hamachi", "radmin", "fortinet", "anyconnect", "openvpn", "ndis", "kernel debug", "docker", "wsl", "vethernet" };
+
+        static void CollectNetwork(PcSpecs s)
+        {
+            try
+            {
+                bool wifiUp = false, ethUp = false, ethIdle = false;
+                foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    string d = (ni.Description + " " + ni.Name).ToLowerInvariant();
+                    bool virt = false;
+                    foreach (string v in VirtualNet) if (d.Contains(v)) virt = true;
+                    if (virt) continue;
+                    bool up = ni.OperationalStatus == OperationalStatus.Up;
+                    bool gw = false;
+                    if (up) { try { gw = ni.GetIPProperties().GatewayAddresses.Count > 0; } catch { } }
+                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) { if (up && gw) wifiUp = true; }
+                    else if (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet || ni.NetworkInterfaceType == NetworkInterfaceType.GigabitEthernet)
+                    {
+                        if (up && gw) ethUp = true;
+                        else if (ni.OperationalStatus == OperationalStatus.Down) ethIdle = true;
+                    }
+                }
+                s.NetKnown = wifiUp || ethUp;
+                s.WifiWithPort = wifiUp && !ethUp && ethIdle;
+            }
+            catch { }
+        }
+
+        // Где лежат игры: библиотеки Steam и игры из вкладки «Игры»
+        static void CollectGames(PcSpecs s)
+        {
+            List<string> libs = new List<string>();
+            try
+            {
+                foreach (SteamGame g in SteamLib.Installed())
+                    if (!string.IsNullOrEmpty(g.Library)) AddGame(s, g.Name, g.Library);
+                libs = SteamLib.Libraries();
+            }
+            catch { }
+            List<string> mine = new List<string>();
+            try { if (App.Manager != null) mine.AddRange(App.Manager.State.Games.ToArray()); } catch { }
+            foreach (string exe in mine)
+            {
+                bool inSteam = false;
+                foreach (string l in libs) if (exe.StartsWith(l.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) inSteam = true;
+                if (!inSteam && !FpsCapture.IsNotGame(Path.GetFileName(exe))) AddGame(s, Path.GetFileNameWithoutExtension(exe), exe);
+            }
+        }
+
+        static void AddGame(PcSpecs s, string name, string path)
+        {
+            if (path.Length < 2 || path[1] != ':') return;
+            GameSpot g = new GameSpot(); g.Name = name; g.Letter = char.ToUpperInvariant(path[0]);
+            s.Games.Add(g);
         }
 
         static int Int(object v) { try { return v == null ? 0 : Convert.ToInt32(v); } catch { return 0; } }
 
-        static void Wmi(string q, Action<ManagementObject> each) { WmiNs(@"root\cimv2", q, each); }
+        static bool Wmi(string q, Action<ManagementObject> each) { return WmiNs(@"root\cimv2", q, each); }
 
-        static void WmiNs(string ns, string q, Action<ManagementObject> each)
+        static bool WmiNs(string ns, string q, Action<ManagementObject> each)
         {
             try
             {
                 using (ManagementObjectSearcher s = new ManagementObjectSearcher(ns, q))
                     foreach (ManagementObject o in s.Get()) using (o) { try { each(o); } catch { } }
+                return true;
             }
-            catch { }
+            catch { return false; }
         }
 
         public static string Gb(long bytes) { double g = bytes / 1073741824.0; return g >= 100 ? g.ToString("0") + " ГБ" : g.ToString(g < 10 ? "0.#" : "0") + " ГБ"; }
 
-        // ---- Узкие места: только то, что можно определить надёжно
-        public static List<Finding> Analyze(PcSpecs s)
+        // ---- Узкие места и скрытые проблемы: только то, что можно определить надёжно
+        public static List<Finding> Analyze(PcSpecs s) { return Analyze(s, null); }
+
+        // passed — сюда попадают названия проверок, где всё в порядке
+        public static List<Finding> Analyze(PcSpecs s, List<string> passed)
         {
             List<Finding> f = new List<Finding>();
+            List<string> ok = passed ?? new List<string>();
             bool igpuOnly = s.Gpus.Count > 0 && !s.HasDiscrete;
+            int n;
 
-            // Память: объём
+            // ---- Видеокарта: драйвер и состояние
+            n = f.Count;
+            if (s.BasicAdapter)
+            {
+                Finding x = Add(f, Severity.Critical, Icons.Gpu, "Не установлен драйвер видеокарты",
+                    "Windows работает через «Базовый видеоадаптер (Майкрософт)». Без драйвера видеокарта почти не используется: игры не запускаются или идут в несколько кадров, разрешение и частота экрана ограничены. " +
+                    "Установите драйвер с сайта NVIDIA, AMD или Intel либо через Центр обновления Windows.");
+                x.Hidden = true; x.Button = "Центр обновления"; x.Fix = delegate { Open("ms-settings:windowsupdate"); };
+            }
+            foreach (GpuInfo g in s.Gpus)
+            {
+                if (g.Error == 0) continue;
+                Finding x = g.Error == 22
+                    ? Add(f, Severity.Critical, Icons.Gpu, "Видеокарта отключена: " + g.Name,
+                        "Она выключена в «Диспетчере устройств», поэтому игры идут на другой графике или не запускаются. Откройте «Диспетчер устройств» → «Видеоадаптеры», нажмите на видеокарту правой кнопкой → «Включить устройство».")
+                    : Add(f, Severity.Critical, Icons.Gpu, "Видеокарта работает с ошибкой: " + g.Name,
+                        "Windows сообщает о сбое устройства (код " + g.Error + ")." +
+                        (g.Error == 43 ? " Код 43 обычно значит, что драйвер дал сбой: скачайте драйвер с сайта производителя и установите его заново." : " Обычно помогает установить драйвер заново с сайта производителя."));
+                x.Hidden = true; x.Button = "Диспетчер устройств"; x.Fix = delegate { Open("devmgmt.msc"); };
+            }
+            foreach (GpuInfo g in s.Gpus)
+            {
+                if (g.DriverDate == null || g.Error != 0) continue;
+                double months = (DateTime.Now - g.DriverDate.Value).TotalDays / 30.4;
+                bool discrete = !g.Integrated;
+                if ((discrete && months > 6) || (!discrete && months > 12))
+                {
+                    Finding x = Add(f, discrete ? Severity.Warning : Severity.Info, Icons.Gpu,
+                        "Драйвер видеокарты от " + g.DriverDate.Value.ToString("dd.MM.yyyy"),
+                        g.Name + ": драйверу " + Age(months) + ". В новых драйверах исправляют фризы и ускоряют свежие игры." +
+                        (discrete ? "" : " Для встроенной графики ноутбука драйвер иногда выпускает только производитель ноутбука — смотрите на его сайте."));
+                    x.Hidden = discrete;
+                    string url = DriverUrl(g.Name);
+                    if (url != null) { x.Button = "Сайт драйверов"; x.Fix = delegate { Open(url); }; }
+                }
+            }
+            if (s.Gpus.Count > 0 && f.Count == n) ok.Add("драйвер видеокарты");
+
+            // ---- Кабель монитора: в материнской плате, хотя есть отдельная видеокарта
+            if (!s.Laptop && s.HasDiscrete)
+            {
+                n = f.Count;
+                List<string> wrong = new List<string>();
+                string card = null;
+                foreach (GpuInfo g in s.Gpus) if (!g.Integrated && g.Error == 0 && card == null) card = g.Name;
+                foreach (MonitorInfo m in s.Monitors)
+                {
+                    GpuInfo a = GpuByName(s, m.Adapter);
+                    if (a != null && a.Integrated) wrong.Add("«" + m.Name + "»");
+                }
+                if (wrong.Count > 0 && card != null)
+                {
+                    Finding x = Add(f, Severity.Critical, Icons.Display, wrong.Count == 1 ? "Монитор подключён к материнской плате" : "Мониторы подключены к материнской плате",
+                        string.Join(", ", wrong.ToArray()) + (wrong.Count == 1 ? " подключён" : " подключены") + " к разъёму встроенной графики, а не к видеокарте " + card + ". " +
+                        "Игры теряют FPS и получают лишнюю задержку, а иногда идут на слабой встроенной графике. " +
+                        "Переключите кабель в разъём видеокарты: на задней стенке корпуса он ниже, в горизонтальном ряду. Вертикальный ряд сверху — это материнская плата.");
+                    x.Hidden = true;
+                }
+                if (s.Monitors.Count > 0 && f.Count == n) ok.Add("кабель монитора");
+            }
+
+            // ---- Мониторы: частота ниже максимальной
+            n = f.Count;
+            foreach (MonitorInfo m in s.Monitors)
+            {
+                int max = m.MaxHz;
+                if (max > m.Hz + 5 && m.Hz > 0)
+                {
+                    MonitorInfo mm = m;
+                    Finding x = Add(f, Severity.Critical, Icons.Display, "Монитор работает на " + m.Hz + " Гц, а может " + max + " Гц",
+                        "Картинка в играх менее плавная, чем могла бы быть, даже если FPS высокий. Частая ошибка после подключения монитора или обновления драйвера.");
+                    x.Button = "Включить " + max + " Гц"; x.Reload = true;
+                    x.Fix = delegate
+                    {
+                        Tweak t = Catalog.Resolve("display.hz|" + mm.Device);
+                        string err = App.Manager.ApplyAction(t, "Частота «" + mm.Name + "»: " + max + " Гц", delegate { Displays.SetHz(mm.Device, max); });
+                        if (err != null) App.Error(err); else App.Toast("Частота экрана: " + max + " Гц. Отменить можно в «Журнале».", Theme.Green);
+                    };
+                }
+            }
+            if (s.Monitors.Count > 0 && f.Count == n) ok.Add("частота экрана");
+
+            // ---- Память
+            n = f.Count;
             long total = s.RamTotal;
             if (total > 0 && total < 7L * 1073741824)
                 Add(f, Severity.Critical, Icons.Memory, "Мало оперативной памяти: " + Gb(total),
@@ -188,7 +388,6 @@ namespace Tunex
                 Add(f, Severity.Warning, Icons.Memory, "Оперативной памяти " + Gb(total) + " — впритык",
                     "Для большинства новых игр желательно 16 ГБ. Перед игрой закрывайте браузер и лишние программы.");
 
-            // Память: каналы
             if (s.Ram.Count == 1)
                 Add(f, igpuOnly ? Severity.Critical : Severity.Warning, Icons.Memory, "Память работает в одноканальном режиме",
                     "Установлена одна планка (" + Gb(s.Ram[0].Capacity) + "). Процессор получает данные примерно вдвое медленнее" +
@@ -210,7 +409,6 @@ namespace Tunex
                         "Часть памяти может работать в одноканальном режиме. Это не страшно, но две одинаковые планки работают быстрее.");
             }
 
-            // Память: частота ниже паспортной
             int rated = 0, actual = int.MaxValue; string type = "";
             foreach (MemInfo m in s.Ram) { rated = Math.Max(rated, m.Speed); if (m.Configured > 0) actual = Math.Min(actual, m.Configured); if (m.TypeName != "") type = m.TypeName; }
             if (actual == int.MaxValue) actual = 0;
@@ -221,41 +419,55 @@ namespace Tunex
             else if (!s.Laptop && actual > 0 && ((type == "DDR4" && actual <= 2400) || (type == "DDR5" && actual <= 4800)))
                 Add(f, Severity.Info, Icons.Memory, "Память на базовой частоте " + actual + " МГц",
                     "Если планки продавались как более быстрые (например, DDR4-3200 или DDR5-6000), в BIOS нужно включить профиль XMP или EXPO. Windows видит только базовую частоту, поэтому проверить это точно нельзя.");
+            if (s.Ram.Count > 0 && f.Count == n) ok.Add("оперативная память");
 
-            // Диски
+            // ---- Файл подкачки
+            if (s.PagefileOff)
+            {
+                Finding x = Add(f, Severity.Critical, Icons.Memory, "Файл подкачки выключен",
+                    "Без него при нехватке памяти игры и браузер вылетают без всякой ошибки, а некоторые игры не запускаются вовсе — даже когда памяти много. " +
+                    "Включите автоматический размер: Windows сама решит, сколько места нужно. Заработает после перезагрузки.");
+                x.Hidden = true; x.Button = "Включить";
+                x.Fix = delegate { App.Form.ApplyTweak(Catalog.Resolve("system.pagefile"), true, delegate { }); };
+            }
+            else if (s.PagefileKnown) ok.Add("файл подкачки");
+
+            // ---- Диски
+            n = f.Count;
             foreach (DiskInfo d in s.Disks)
             {
                 if (d.System && d.Hdd)
                     Add(f, Severity.Critical, Icons.System, "Windows стоит на жёстком диске (HDD)",
                         "Жёсткий диск в 20–50 раз медленнее SSD: долгая загрузка игр, подвисания при подгрузке карты. Перенос Windows и игр на SSD — самое заметное улучшение для такого ПК.");
-                else if (!d.System && d.Hdd)
+                else if (!d.System && d.Hdd && !HasGames(s, d))
                     Add(f, Severity.Info, Icons.System, "Жёсткий диск: " + d.Name,
                         "Хорош для фильмов и фото, но игры на нём будут долго загружаться. Ставьте игры на SSD.");
                 if (d.System && d.Free >= 0 && (d.Free < 20L * 1073741824 || (d.Size > 0 && d.Free < d.Size / 10)))
                     Add(f, Severity.Warning, Icons.System, "На системном диске мало места: " + Gb(d.Free),
                         "Windows и играм нужно место для обновлений, кэша шейдеров и файла подкачки. Когда его мало, бывают фризы и ошибки обновлений. Освободите хотя бы 20–30 ГБ.");
             }
-
-            // Мониторы: частота ниже максимальной
-            foreach (MonitorInfo m in s.Monitors)
-            {
-                int max = m.MaxHz;
-                if (max > m.Hz + 5 && m.Hz > 0)
+            // Игры на жёстком диске, хотя есть SSD
+            DiskInfo ssd = null;
+            foreach (DiskInfo d in s.Disks)
+                if (d.Ssd && !d.Usb && d.Letters != "" && (ssd == null || d.Free > ssd.Free)) ssd = d;
+            if (ssd != null)
+                foreach (DiskInfo d in s.Disks)
                 {
-                    MonitorInfo mm = m;
-                    Finding x = Add(f, Severity.Critical, Icons.Display, "Монитор работает на " + m.Hz + " Гц, а может " + max + " Гц",
-                        "Картинка в играх менее плавная, чем могла бы быть, даже если FPS высокий. Частая ошибка после подключения монитора или обновления драйвера.");
-                    x.Button = "Включить " + max + " Гц";
-                    x.Fix = delegate
-                    {
-                        Tweak t = Catalog.Resolve("display.hz|" + mm.Device);
-                        string err = App.Manager.ApplyAction(t, "Частота «" + mm.Name + "»: " + max + " Гц", delegate { Displays.SetHz(mm.Device, max); });
-                        if (err != null) App.Error(err); else App.Toast("Частота экрана: " + max + " Гц. Отменить можно в «Журнале».", Theme.Green);
-                    };
+                    if (!d.Hdd || d.System) continue;
+                    List<string> names = new List<string>();
+                    foreach (GameSpot g in s.Games) if (d.Letters.IndexOf(g.Letter) >= 0 && !names.Contains(g.Name)) names.Add(g.Name);
+                    if (names.Count == 0) continue;
+                    string list = names.Count <= 3 ? string.Join(", ", names.ToArray())
+                        : string.Join(", ", names.GetRange(0, 3).ToArray()) + " и ещё " + (names.Count - 3);
+                    Finding x = Add(f, Severity.Warning, Icons.System, (names.Count == 1 ? "Игра лежит" : "Игры лежат") + " на жёстком диске, хотя есть SSD",
+                        "На диске " + Drives(d.Letters) + " (" + d.Name + ", жёсткий) — " + list + ". На SSD они загружались бы в несколько раз быстрее и меньше подвисали при подгрузке карты. " +
+                        "В Steam: правой кнопкой по игре → «Свойства» → «Установленные файлы» → «Переместить папку установки»." +
+                        (ssd.Free >= 0 ? " На SSD (" + Drives(ssd.Letters) + ") свободно " + Gb(ssd.Free) + "." : ""));
+                    x.Hidden = true;
                 }
-            }
+            if (s.Disks.Count > 0 && f.Count == n) ok.Add("диски и где лежат игры");
 
-            // Видеокарты
+            // ---- Видеокарты: к сведению
             if (igpuOnly)
                 Add(f, Severity.Info, Icons.Gpu, "Нет отдельной видеокарты",
                     "Встроенная графика (" + s.Gpus[0].Name + ") тянет лёгкие игры — CS2, Dota 2, Minecraft, Valorant — на низких настройках. Новые требовательные игры пойдут плохо или не запустятся.");
@@ -265,40 +477,97 @@ namespace Tunex
                     "Windows сама решает, на какой запускать программу, и иногда запускает игру на слабой встроенной. Добавьте игры во вкладке «Игры» и включите для них «Мощная видеокарта».");
                 x.Button = "Открыть «Игры»"; x.Fix = delegate { App.Form.Navigate("games"); };
             }
-            foreach (GpuInfo g in s.Gpus)
-            {
-                if (g.DriverDate == null) continue;
-                double months = (DateTime.Now - g.DriverDate.Value).TotalDays / 30.4;
-                bool discrete = !g.Integrated;
-                if ((discrete && months > 6) || (!discrete && months > 12))
-                {
-                    Finding x = Add(f, discrete ? Severity.Warning : Severity.Info, Icons.Gpu,
-                        "Драйвер видеокарты от " + g.DriverDate.Value.ToString("dd.MM.yyyy"),
-                        g.Name + ": драйверу " + Age(months) + ". В новых драйверах исправляют фризы и ускоряют свежие игры." +
-                        (discrete ? "" : " Для встроенной графики ноутбука драйвер иногда выпускает только производитель ноутбука — смотрите на его сайте."));
-                    string url = DriverUrl(g.Name);
-                    if (url != null) { x.Button = "Сайт драйверов"; x.Fix = delegate { try { System.Diagnostics.Process.Start(url); } catch (Exception ex) { App.Error(ex.Message); } }; }
-                }
-            }
 
-            // Питание
+            // ---- Питание
+            n = f.Count;
             if (s.OnBattery)
-                Add(f, Severity.Warning, Icons.Power, "Ноутбук работает от батареи",
+            {
+                Finding x = Add(f, Severity.Warning, Icons.Power, "Ноутбук работает от батареи",
                     "На батарее Windows и производитель ограничивают процессор и видеокарту — FPS может быть вдвое ниже. Для игр подключите зарядку.");
+                x.Hidden = true;
+            }
+            if (s.BatterySaver)
+            {
+                Finding x = Add(f, Severity.Warning, Icons.Power, "Включена экономия заряда",
+                    "Windows притормаживает процессор и фоновые программы, чтобы батарея держала дольше. Для игр выключите её.");
+                x.Hidden = true; x.Button = "Открыть настройки"; x.Reload = true; x.Fix = delegate { Open("ms-settings:batterysaver"); };
+            }
             if (s.SaverPlan)
             {
                 Finding x = Add(f, Severity.Warning, Icons.Power, "Включена схема питания «Экономия энергии»",
                     "Процессор специально работает медленнее. Для игр выберите другую схему.");
-                x.Button = "Открыть"; x.Fix = delegate { App.Form.Navigate("power"); };
+                x.Button = "Открыть"; x.Reload = true; x.Fix = delegate { App.Form.Navigate("power"); };
             }
+            if (s.EfficiencyMode)
+            {
+                Finding x = Add(f, Severity.Warning, Icons.Power, "Режим питания «Лучшая энергоэффективность»",
+                    "Этот ползунок в Параметрах Windows снижает частоту процессора даже от розетки. Его легко сдвинуть случайно — например, в меню значка батареи.");
+                x.Hidden = true; x.Button = "Макс. производительность"; x.Reload = true;
+                x.Fix = delegate
+                {
+                    string err = App.Manager.ApplyAction(Catalog.PowerOverlay, "Режим питания: Макс. производительность", delegate { Power.SetOverlay(Power.OverlayBest); });
+                    if (err != null) App.Error(err); else App.Toast("Режим питания: макс. производительность. Отменить можно в «Журнале».", Theme.Green);
+                };
+            }
+            if (f.Count == n) ok.Add("питание");
 
-            // Процессор
+            // ---- Сеть
+            if (s.WifiWithPort)
+            {
+                Finding x = Add(f, Severity.Info, Icons.Network, "Интернет по Wi-Fi, хотя есть разъём для кабеля",
+                    "В онлайн-играх Wi-Fi даёт скачки пинга и потери пакетов: противники «телепортируются», выстрелы не засчитываются. Кабель от роутера убирает это почти полностью.");
+                x.Hidden = true;
+            }
+            else if (s.NetKnown) ok.Add("подключение к интернету");
+
+            // ---- Процессор
             if (s.Threads > 0 && s.Threads < 4)
                 Add(f, Severity.Warning, Icons.Cpu, "Процессор: всего " + s.Threads + " потока",
                     "Многие современные игры рассчитаны минимум на 4–6 потоков — возможны рывки, особенно в онлайн-играх.");
 
             f.Sort(delegate(Finding a, Finding b) { return ((int)a.Level).CompareTo((int)b.Level); });
             return f;
+        }
+
+        // Последняя проверка этого ПК — её показывает «Главная»
+        public static List<Finding> Last;
+        static int running;
+
+        // Проверка в фоне; done вызывается в фоновом потоке
+        public static void RunInBackground(Action done)
+        {
+            if (System.Threading.Interlocked.Exchange(ref running, 1) == 1) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { Last = Analyze(Collect()); } catch { }
+                running = 0;
+                if (done != null) try { done(); } catch { }
+            });
+        }
+
+        static GpuInfo GpuByName(PcSpecs s, string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            foreach (GpuInfo g in s.Gpus) if (string.Equals(g.Name.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase)) return g;
+            return null;
+        }
+
+        static bool HasGames(PcSpecs s, DiskInfo d)
+        {
+            foreach (GameSpot g in s.Games) if (d.Letters.IndexOf(g.Letter) >= 0) return true;
+            return false;
+        }
+
+        static string Drives(string letters)
+        {
+            List<string> l = new List<string>();
+            foreach (char c in letters) l.Add(c + ":");
+            return string.Join(", ", l.ToArray());
+        }
+
+        static void Open(string target)
+        {
+            try { System.Diagnostics.Process.Start(target); } catch (Exception ex) { App.Error(ex.Message); }
         }
 
         static Finding Add(List<Finding> l, Severity lv, string glyph, string title, string text)

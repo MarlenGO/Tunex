@@ -11,7 +11,7 @@ using System.Web.Script.Serialization;
 namespace Tunex
 {
     // ---------------------------------------------------------------- Игры Steam на этом ПК
-    class SteamGame { public int AppId; public string Name; public bool Installed; }
+    class SteamGame { public int AppId; public string Name, Library; public bool Installed; }
 
     static class SteamLib
     {
@@ -74,7 +74,7 @@ namespace Tunex
                     int appid = int.Parse(id.Groups[1].Value, CultureInfo.InvariantCulture);
                     string nm = name.Success ? name.Groups[1].Value : "Игра " + appid;
                     if (Array.IndexOf(NotGames, appid) >= 0 || IsToolName(nm) || map.ContainsKey(appid)) continue;
-                    SteamGame g = new SteamGame(); g.AppId = appid; g.Name = nm; g.Installed = true;
+                    SteamGame g = new SteamGame(); g.AppId = appid; g.Name = nm; g.Library = lib; g.Installed = true;
                     map[appid] = g;
                 }
             }

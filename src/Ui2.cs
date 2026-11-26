@@ -104,10 +104,7 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             if (hover)
-            {
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(8, 255, 255, 255))) g.FillRectangle(b, ClientRectangle);
-                using (SolidBrush ab = new SolidBrush(Theme.Accent)) g.FillRectangle(ab, 0, 0, Theme.S(2), Height);
-            }
+                using (SolidBrush b = new SolidBrush(Theme.Alpha(Theme.CardInner, Theme.CardInner.A * 2 / 3))) g.FillRectangle(b, ClientRectangle);
             bool dim = !state.Available;
             int tw = TextW(Width);
             int th = Theme.Measure(Tweak.Title, Theme.FontCellTitle, tw).Height;
@@ -119,7 +116,7 @@ namespace Tunex
             string st = state.Status ?? "";
             int bw = Math.Min(tw, Theme.Measure(st, Theme.FontSmallBold).Width + Theme.S(18));
             Rectangle br = new Rectangle(Pad, y + th + Theme.S(8), bw, BadgeH);
-            Theme.FillRound(g, Theme.Alpha(sc, dim ? 22 : 34), br, Theme.Sf(4));
+            Theme.FillRound(g, Theme.Alpha(sc, dim ? 22 : 38), br, br.Height / 2f);
             Theme.DrawText(g, st, Theme.FontSmallBold, sc, br, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         }
@@ -157,7 +154,7 @@ namespace Tunex
             headerH = 0;
             if (Title != null)
             {
-                headerH = pad + Theme.Measure(Title.ToUpperInvariant(), Theme.FontLabel).Height;
+                headerH = pad + Theme.Measure(Title, Theme.FontH2).Height;
                 if (Subtitle != null) headerH += Theme.S(6) + Theme.Measure(Subtitle, Theme.FontSmall, HeaderTextW).Height;
                 if (accessory != null) accessory.Location = new Point(Width - pad - accessory.Width + Theme.S(6), pad - Theme.S(6));
                 headerH += pad;
@@ -189,13 +186,12 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.Card, r, Theme.Sf(14));
-            Theme.DrawRound(g, Theme.Border, r, Theme.Sf(14), 1f);
+            Theme.PaintCard(g, r, Theme.Sf(14));
             int pad = Theme.S(20);
             if (Title != null)
             {
-                int th = Theme.Measure(Title.ToUpperInvariant(), Theme.FontLabel).Height;
-                Theme.DrawText(g, Title.ToUpperInvariant(), Theme.FontLabel, Theme.Text2, new Rectangle(pad, pad, HeaderTextW, th), TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                int th = Theme.Measure(Title, Theme.FontH2).Height;
+                Theme.DrawText(g, Title, Theme.FontH2, Theme.Text, new Rectangle(pad, pad, HeaderTextW, th), TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
                 if (Subtitle != null) Theme.DrawText(g, Subtitle, Theme.FontSmall, Theme.Text2, new Rectangle(pad, pad + th + Theme.S(6), HeaderTextW, Height), TextFormatFlags.WordBreak);
             }
             using (SolidBrush b = new SolidBrush(Theme.Border)) foreach (Rectangle l in lines) g.FillRectangle(b, l);
@@ -271,7 +267,7 @@ namespace Tunex
         {
             Graphics g = e.Graphics;
             if (backdrop != null) g.DrawImageUnscaled(backdrop, 0, 0);
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(backdrop != null ? 170 : 220, 6, 7, 9))) g.FillRectangle(b, ClientRectangle);
+            using (SolidBrush b = new SolidBrush(backdrop != null ? Theme.Scrim : Theme.Alpha(Theme.Scrim, 220))) g.FillRectangle(b, ClientRectangle);
         }
     }
 
@@ -287,8 +283,9 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.Card, r, Theme.Sf(16));
-            Theme.DrawRound(g, Theme.Border, r, Theme.Sf(16), 1f);
+            // Окно поверх затемнения — непрозрачное, скругление 18 px (gw-sheet)
+            Theme.FillRound(g, Theme.Pop, r, Theme.Sf(18));
+            Theme.DrawRound(g, Theme.Frame, r, Theme.Sf(18), 1f);
             using (Pen p = new Pen(Theme.Border)) foreach (int y in Separators) g.DrawLine(p, 1, y, Width - 2, y);
             PaintContent(g);
         }
@@ -300,8 +297,7 @@ namespace Tunex
             Size ts = Theme.Measure(text, Theme.FontSmall);
             int h = Theme.S(36), w = ts.Width + Theme.S(glyph != null ? 52 : 28);
             Rectangle r = new Rectangle(x, y, w, h);
-            Theme.FillRound(g, Theme.CardInner, r, Theme.Sf(10));
-            using (SolidBrush cb = new SolidBrush(color == Theme.Text2 ? Theme.Text3 : color)) g.FillRectangle(cb, x, y, Theme.S(2), h);
+            Theme.FillRound(g, Theme.CardInner, r, h / 2f);
             int tx = x + Theme.S(14);
             if (glyph != null) { Theme.Glyph(g, glyph, Theme.FontIconSmall, color, new Rectangle(tx, y, Theme.S(16), h)); tx += Theme.S(24); }
             Theme.DrawText(g, text, Theme.FontSmall, color == Theme.Text2 ? Theme.Text : color, new Rectangle(tx, y, ts.Width + 4, h), TextFormatFlags.VerticalCenter);
@@ -416,7 +412,7 @@ namespace Tunex
             int w = Width - Pad * 2, top = Pad;
             if (stepText != null)
             {
-                Theme.DrawText(g, stepText.ToUpperInvariant(), Theme.FontSmallBold, Theme.Accent, new Rectangle(Pad, top, w, Theme.S(20)), TextFormatFlags.Left);
+                Theme.DrawText(g, stepText, Theme.FontSmallBold, Theme.Accent, new Rectangle(Pad, top, w, Theme.S(20)), TextFormatFlags.Left);
                 top += Theme.Measure(stepText, Theme.FontSmallBold).Height + Theme.S(10);
             }
             int textW = w - Theme.S(120);
@@ -429,7 +425,7 @@ namespace Tunex
             Theme.DrawText(g, "Подробнее", Theme.FontBodyBold, Theme.Text, new Rectangle(Pad, y, w, lh), TextFormatFlags.Left);
             y += lh + Theme.S(8);
             int dh = Theme.Measure(tweak.Details ?? "", Theme.FontBody, w).Height;
-            Theme.DrawText(g, tweak.Details ?? "", Theme.FontBody, Color.FromArgb(200, 203, 208), new Rectangle(Pad, y, w, dh), TextFormatFlags.WordBreak);
+            Theme.DrawText(g, tweak.Details ?? "", Theme.FontBody, Theme.Text, new Rectangle(Pad, y, w, dh), TextFormatFlags.WordBreak);
             y += dh + Theme.S(18);
             int x = Pad;
             foreach (KeyValuePair<string, Color> c in chips)
@@ -648,8 +644,7 @@ namespace Tunex
         static void Box(Graphics g, Rectangle r)
         {
             RectangleF rf = new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1.5f, r.Height - 1.5f);
-            Theme.FillRound(g, Theme.Card, rf, Theme.Sf(14));
-            Theme.DrawRound(g, Theme.Border, rf, Theme.Sf(14), 1f);
+            Theme.PaintCard(g, rf, Theme.Sf(14));
         }
 
         static void Cell(Graphics g, Rectangle r, string value, string label, Color valueColor)
@@ -659,7 +654,7 @@ namespace Tunex
             string l = Theme.Track(label);
             int lh = Theme.Measure(l, Theme.FontLabel).Height;
             int y = r.Y + (r.Height - vh - lh - Theme.S(6)) / 2;
-            Theme.DrawText(g, l, Theme.FontLabel, Theme.Text3, new Rectangle(r.X + p, y, r.Width - p * 2, lh + 2), TextFormatFlags.EndEllipsis);
+            Theme.DrawText(g, l, Theme.FontLabel, Theme.Text2, new Rectangle(r.X + p, y, r.Width - p * 2, lh + 2), TextFormatFlags.EndEllipsis);
             Theme.DrawText(g, value, Theme.FontH2, valueColor, new Rectangle(r.X + p, y + lh + Theme.S(6), r.Width - p * 2, vh), TextFormatFlags.EndEllipsis);
         }
 
@@ -679,7 +674,7 @@ namespace Tunex
             // Рейтинг с кривой распределения
             Rectangle rate = new Rectangle(left.X, left.Y, c0, left.Height);
             int pad = Theme.S(22);
-            Theme.DrawText(g, Theme.Track("Игровой рейтинг"), Theme.FontLabel, Theme.Text3, new Rectangle(rate.X + pad, rate.Y + pad, rate.Width - pad, Theme.S(16)), TextFormatFlags.Left);
+            Theme.DrawText(g, "Игровой рейтинг", Theme.FontLabel, Theme.Text2, new Rectangle(rate.X + pad, rate.Y + pad, rate.Width - pad, Theme.S(16)), TextFormatFlags.Left);
             string big = bench != null ? bench.Total.ToString() : "—";
             Theme.DrawText(g, big, Theme.FontBig, Theme.Text, new Rectangle(rate.X + pad - Theme.S(1), rate.Y + pad + Theme.S(16), rate.Width - pad, Theme.S(36)), TextFormatFlags.Left);
             if (bench != null)
@@ -789,7 +784,7 @@ namespace Tunex
             Size = new Size(width, Theme.S(34));
             Cursor = Cursors.IBeam;
             Box.BorderStyle = BorderStyle.None;
-            Box.BackColor = Theme.Button; Box.ForeColor = Theme.Text; Box.Font = Theme.FontBody;
+            Box.BackColor = Theme.Field; Box.ForeColor = Theme.Text; Box.Font = Theme.FontBody;
             Controls.Add(Box);
             Box.KeyDown += delegate(object o, KeyEventArgs e)
             {
@@ -816,8 +811,10 @@ namespace Tunex
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.FillRound(g, Theme.Button, r, Theme.Sf(10));
-            Theme.DrawRound(g, Box.Focused ? Theme.Accent : Theme.ButtonBorder, r, Theme.Sf(10), 1f);
+            // gw-field: светлое поле с тонкой рамкой, в фокусе — рамка цветом акцента и мягкое кольцо
+            if (Box.Focused) Theme.DrawRound(g, Theme.Alpha(Theme.Accent, 90), new RectangleF(r.X - 0.5f, r.Y - 0.5f, r.Width + 1, r.Height + 1), Theme.Sf(11), Theme.Sf(2));
+            Theme.FillRound(g, Theme.Field, r, Theme.Sf(10));
+            Theme.DrawRound(g, Box.Focused ? Theme.Accent : Theme.FieldEdge, r, Theme.Sf(10), 1f);
         }
     }
 
@@ -946,17 +943,18 @@ namespace Tunex
             Graphics g = e.Graphics; Theme.Smooth(g);
             RectangleF card = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             Theme.FillRound(g, Theme.Card, card, Theme.Sf(14));
+            GraphicsPath clip = Theme.RoundPath(card, Theme.Sf(14));
+            g.SetClip(clip);
             int[] x = ColumnX();
             int rh = RowH;
             List<int> vis = VisibleRows();
 
-            // Заголовок
-            using (SolidBrush hb = new SolidBrush(Theme.Sidebar)) g.FillRectangle(hb, 1, 1, Width - 2, HeadH - 1);
+            // Заголовок: обычными буквами, серым
             for (int c = 0; c < Columns.Count; c++)
             {
-                string t = Columns[c].Title.ToUpperInvariant();
+                string t = Columns[c].Title;
                 Rectangle r = new Rectangle(x[c], 0, x[c + 1] - x[c] - Theme.S(10), HeadH);
-                Theme.DrawText(g, t, Theme.FontLabel, Theme.Text3, r, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | (Columns[c].Right ? TextFormatFlags.Right : TextFormatFlags.Left));
+                Theme.DrawText(g, t, Theme.FontLabel, Theme.Text2, r, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | (Columns[c].Right ? TextFormatFlags.Right : TextFormatFlags.Left));
             }
 
             using (Pen sep = new Pen(Theme.Border))
@@ -970,12 +968,9 @@ namespace Tunex
                     if (grp)
                         using (SolidBrush b = new SolidBrush(i == hover ? Theme.CardHover : Theme.CardInner)) g.FillRectangle(b, 1, y + 1, Width - 2, rh - 1);
                     else if (i == Highlight)
-                    {
-                        using (SolidBrush b = new SolidBrush(Theme.Alpha(Theme.Accent, 26))) g.FillRectangle(b, 1, y + 1, Width - 2, rh - 1);
-                        using (SolidBrush b = new SolidBrush(Theme.Accent)) g.FillRectangle(b, 1, y + 1, Theme.S(3), rh - 1);
-                    }
+                        using (SolidBrush b = new SolidBrush(Theme.AccentSoft)) g.FillRectangle(b, 1, y + 1, Width - 2, rh - 1);
                     else if (i == hover)
-                        using (SolidBrush b = new SolidBrush(Theme.CardHover)) g.FillRectangle(b, 1, y + 1, Width - 2, rh - 1);
+                        using (SolidBrush b = new SolidBrush(Theme.CardInner)) g.FillRectangle(b, 1, y + 1, Width - 2, rh - 1);
                     if (s > 0) g.DrawLine(sep, grp ? 1 : Pad, y, grp ? Width - 2 : Width - Pad, y);
 
                     TableCell[] row = Rows[i];
@@ -1019,7 +1014,8 @@ namespace Tunex
                     Theme.DrawText(g, Footer, Theme.FontSmall, Theme.Text3, new Rectangle(Pad, fy + Theme.S(13), Width - Pad * 2, FooterH - Theme.S(13)), TextFormatFlags.WordBreak);
                 }
             }
-            Theme.DrawRound(g, Theme.Border, card, Theme.Sf(14), 1f);
+            g.ResetClip(); clip.Dispose();
+            Theme.DrawRound(g, Theme.CardEdge, card, Theme.Sf(14), 1f);
         }
     }
 }

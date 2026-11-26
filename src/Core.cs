@@ -20,37 +20,93 @@ namespace Tunex
 
         public static float Scale = 1f;
 
-        // Дизайн v2 «Приборная панель»: тёплый графит, один сигнальный лаймовый акцент, острые углы,
-        // технический шрифт Bahnschrift для заголовков и цифр. Прежний дизайн — design-backup\v1-teal
-        public static readonly Color Bg = Color.FromArgb(19, 19, 18);
-        public static readonly Color Sidebar = Color.FromArgb(14, 14, 13);
-        public static readonly Color SidebarGlow = Color.FromArgb(14, 14, 13);
-        public static readonly Color Card = Color.FromArgb(26, 26, 24);
-        public static readonly Color CardInner = Color.FromArgb(36, 36, 33);
-        public static readonly Color CardHover = Color.FromArgb(44, 44, 40);
-        public static readonly Color Border = Color.FromArgb(50, 49, 45);
-        // Акцент меняется в «Оформлении»; оттенки (фон, текст, текст на кнопке) считаются из него
-        public static Color Accent = Color.FromArgb(198, 240, 92);      // сигнальный лайм
-        public static Color AccentSoft = Color.FromArgb(38, 44, 24);
-        public static Color AccentText = Color.FromArgb(212, 245, 138);
-        public static Color OnAccent = Color.FromArgb(18, 22, 6);       // текст на кнопке с акцентом
+        // Дизайн v3 «Стекло» (GlassWise UI): светлая и тёмная тема в духе Apple, мягкое голубое свечение
+        // в левом верхнем углу, почти белые (в тёмной — полупрозрачные) карточки, круглые кнопки, системные цвета iOS.
+        // Прежние дизайны — design-backup\v2-dashboard и design-backup\v1-teal
+        public static bool Dark;
+        public static Color Bg, Glow, Sidebar, SidebarGlow, Card, CardInner, CardHover, Border, CardEdge, Frame, Pop, PopHover, Field, FieldEdge, Seg, Scrim;
+        // Акцент меняется в «Оформлении»; оттенки (фон выбранного пункта, текст на кнопке) считаются из него
+        public static Color Accent, AccentSoft, AccentText, OnAccent = Color.White;
 
-        public static readonly string[] PresetNames = { "Синий", "Бирюзовый", "Лайм" };
-        public static readonly Color[] Presets = { Color.FromArgb(92, 152, 255), Color.FromArgb(77, 201, 176), Color.FromArgb(198, 240, 92) };
-        public static Color DefaultAccent { get { return Presets[2]; } }
+        public static readonly string[] PresetNames = { "Синий", "Индиго", "Бирюзовый" };
+        static readonly Color[] PresetsLight = { Color.FromArgb(0, 122, 255), Color.FromArgb(88, 86, 214), Color.FromArgb(48, 176, 199) };
+        static readonly Color[] PresetsDark = { Color.FromArgb(10, 132, 255), Color.FromArgb(94, 92, 230), Color.FromArgb(64, 200, 224) };
+        public static Color[] Presets { get { return Dark ? PresetsDark : PresetsLight; } }
+        public static Color DefaultAccent { get { return Presets[0]; } }
 
-        public static Color OnAccentFor(Color a) { return Blend(a, Color.Black, 0.88f); }
+        public static Color Green, Blue, Orange, Red, Purple, Text, Text2, Text3, ToggleOff, Button, ButtonBorder;
+
+        // Тема: "system" — как в Windows, "light" — светлая, "dark" — тёмная
+        public static string Mode = "system";
+
+        public static bool SystemDark()
+        {
+            try
+            {
+                object v = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+                return v is int && (int)v == 0;
+            }
+            catch { return false; }
+        }
+
+        public static void SetMode(string mode)
+        {
+            Mode = mode == "light" || mode == "dark" ? mode : "system";
+            Dark = Mode == "dark" || (Mode == "system" && SystemDark());
+            if (Dark)
+            {
+                Bg = Color.FromArgb(11, 13, 20); Glow = Color.FromArgb(22, 48, 97);
+                Card = Color.FromArgb(17, 255, 255, 255); CardEdge = Color.FromArgb(22, 255, 255, 255);
+                CardInner = Color.FromArgb(20, 255, 255, 255); CardHover = Color.FromArgb(36, 255, 255, 255);
+                Border = Color.FromArgb(26, 255, 255, 255); Frame = Color.FromArgb(38, 42, 54);
+                Pop = Color.FromArgb(26, 32, 48); PopHover = Color.FromArgb(44, 50, 66);
+                Field = Color.FromArgb(8, 9, 14); FieldEdge = Color.FromArgb(23, 255, 255, 255);
+                Seg = Color.FromArgb(46, 255, 255, 255); Scrim = Color.FromArgb(170, 0, 0, 0);
+                Text = Color.White; Text2 = Color.FromArgb(170, 175, 189); Text3 = Color.FromArgb(122, 127, 140);
+                Green = Color.FromArgb(48, 209, 88); Blue = Color.FromArgb(64, 200, 224); Orange = Color.FromArgb(255, 159, 10);
+                Red = Color.FromArgb(255, 69, 58); Purple = Color.FromArgb(191, 90, 242);
+            }
+            else
+            {
+                Bg = Color.FromArgb(242, 244, 248); Glow = Color.FromArgb(207, 224, 255);
+                Card = Color.FromArgb(240, 255, 255, 255); CardEdge = Color.FromArgb(26, 16, 32, 64);
+                CardInner = Color.FromArgb(18, 16, 32, 64); CardHover = Color.FromArgb(31, 16, 32, 64);
+                Border = Color.FromArgb(31, 16, 32, 64); Frame = Color.FromArgb(206, 212, 224);
+                Pop = Color.White; PopHover = Color.FromArgb(238, 240, 244);
+                Field = Color.FromArgb(241, 243, 247); FieldEdge = Color.FromArgb(31, 16, 32, 64);
+                Seg = Color.White; Scrim = Color.FromArgb(92, 0, 0, 0);
+                Text = Color.FromArgb(11, 18, 32); Text2 = Color.FromArgb(88, 95, 108); Text3 = Color.FromArgb(132, 138, 150);
+                Green = Color.FromArgb(52, 199, 89); Blue = Color.FromArgb(48, 176, 199); Orange = Color.FromArgb(255, 149, 0);
+                Red = Color.FromArgb(255, 59, 48); Purple = Color.FromArgb(175, 82, 222);
+            }
+            Sidebar = Bg; SidebarGlow = Glow;
+            ToggleOff = CardHover; Button = CardHover; ButtonBorder = Color.Transparent;
+            SetAccent(Accent.IsEmpty ? DefaultAccent : MatchPreset(Accent));
+        }
+
+        // Готовый цвет другой темы — тот же цвет в текущей; акценты прежних дизайнов — синий по умолчанию
+        public static Color MatchPreset(Color c)
+        {
+            for (int i = 0; i < PresetsLight.Length; i++)
+                if (PresetsLight[i].ToArgb() == c.ToArgb() || PresetsDark[i].ToArgb() == c.ToArgb()) return Presets[i];
+            string h = ToHex(c);
+            if (h == "#C6F05C" || h == "#4DC9B0" || h == "#5C98FF") return DefaultAccent;
+            return c;
+        }
+
+        public static Color OnAccentFor(Color a) { return Luma(a) > 0.62f ? Blend(a, Color.Black, 0.85f) : Color.White; }
         public static float Luma(Color c) { return (0.299f * c.R + 0.587f * c.G + 0.114f * c.B) / 255f; }
 
         public static void SetAccent(Color a)
         {
             a = Color.FromArgb(255, a.R, a.G, a.B);
-            // Слишком тёмный цвет на тёмном фоне не видно — осветляем
-            for (int i = 0; i < 8 && Luma(a) < 0.42f; i++) a = Blend(a, Color.White, 0.15f);
+            // Слишком тёмный цвет на тёмном фоне (или слишком светлый на светлом) плохо видно — поправляем
+            for (int i = 0; i < 8 && Dark && Luma(a) < 0.38f; i++) a = Blend(a, Color.White, 0.15f);
+            for (int i = 0; i < 8 && !Dark && Luma(a) > 0.72f; i++) a = Blend(a, Color.Black, 0.12f);
             Accent = a;
-            AccentSoft = Blend(Bg, a, 0.16f);
-            AccentText = Blend(a, Color.White, 0.25f);
-            OnAccent = Luma(a) > 0.55f ? Blend(a, Color.Black, 0.88f) : Color.White;
+            AccentSoft = Alpha(a, 36);   // --tint: мягкий фон выбранного пункта
+            AccentText = a;
+            OnAccent = OnAccentFor(a);
             Logo.Accent = a; Logo.AccentDeep = Blend(a, Color.Black, 0.4f);
         }
 
@@ -64,29 +120,42 @@ namespace Tunex
             c = Color.FromArgb((v >> 16) & 255, (v >> 8) & 255, v & 255);
             return true;
         }
-        public static readonly Color Green = Color.FromArgb(178, 228, 96);       // «применено» — родственник акцента
-        public static readonly Color Blue = Color.FromArgb(122, 172, 230);
-        public static readonly Color Orange = Color.FromArgb(240, 168, 64);
-        public static readonly Color Red = Color.FromArgb(240, 96, 78);
-        public static readonly Color Purple = Color.FromArgb(176, 150, 236);
-        public static readonly Color Text = Color.FromArgb(234, 233, 228);
-        public static readonly Color Text2 = Color.FromArgb(158, 156, 148);
-        public static readonly Color Text3 = Color.FromArgb(110, 108, 101);
-        public static readonly Color ToggleOff = Color.FromArgb(62, 61, 56);
-        public static readonly Color Button = Color.FromArgb(34, 34, 31);
-        public static readonly Color ButtonBorder = Color.FromArgb(70, 69, 63);
 
-        // Все скругления не больше 3 px — острые «приборные» углы
-        public static float MaxRadius { get { return Sf(3); } }
+        // Скругления как в GlassWise: карточки 12–14 px, кнопки круглые — ограничения больше нет
+        public static float MaxRadius { get { return Sf(400); } }
 
-        // Разрядка для заглавных подписей: тонкий пробел между буквами
-        public static string Track(string s)
+        // Подписи — обычными буквами (в прошлом дизайне были заглавные с разрядкой)
+        public static string Track(string s) { return s; }
+
+        // Фон окна: цвет и голубое свечение в левом верхнем углу окна (как --page-bg), общее для всех частей окна
+        public static void PaintBackdrop(Graphics g, Control c, Rectangle area)
         {
-            if (string.IsNullOrEmpty(s)) return s;
-            if (s.Length > 16) return s.ToUpperInvariant();
-            System.Text.StringBuilder b = new System.Text.StringBuilder(s.Length * 2);
-            foreach (char c in s.ToUpperInvariant()) { if (b.Length > 0) b.Append('\u200A'); b.Append(c); }
-            return b.ToString();
+            using (SolidBrush b = new SolidBrush(Bg)) g.FillRectangle(b, area);
+            Form f = c.FindForm();
+            if (f == null || !c.IsHandleCreated) return;
+            Point o = f.PointToClient(c.PointToScreen(Point.Empty));
+            float rx = f.ClientSize.Width * 0.63f, ry = f.ClientSize.Height * 0.32f;
+            if (rx < 2 || ry < 2) return;
+            RectangleF glow = new RectangleF(-rx - o.X, -ry - o.Y, rx * 2, ry * 2);
+            if (!glow.IntersectsWith(area)) return;
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                p.AddEllipse(glow);
+                using (PathGradientBrush pb = new PathGradientBrush(p))
+                {
+                    pb.CenterPoint = new PointF(-o.X, -o.Y);
+                    pb.CenterColor = Glow;
+                    pb.SurroundColors = new Color[] { Alpha(Glow, 0) };
+                    g.FillPath(pb, p);
+                }
+            }
+        }
+
+        // Карточка: заливка и тонкая кромка
+        public static void PaintCard(Graphics g, RectangleF r, float rad)
+        {
+            FillRound(g, Card, r, rad);
+            DrawRound(g, CardEdge, r, rad, 1f);
         }
 
         public static Font FontBody, FontBodyBold, FontSmall, FontSmallBold, FontNav, FontTitle, FontH2, FontBig, FontIcon, FontIconBig, FontIconSmall, FontIconTiny, FontIconNav, FontLogo, FontLabel, FontNum, FontCellTitle;
@@ -94,19 +163,20 @@ namespace Tunex
         public static void Init()
         {
             using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) Scale = g.DpiX / 96f;
+            if (Accent.IsEmpty) SetMode(Mode);
             FontBody = new Font("Segoe UI", 9.75f);
             FontBodyBold = new Font("Segoe UI Semibold", 9.75f);
             FontCellTitle = new Font("Segoe UI Semibold", 11.25f);
             FontSmall = new Font("Segoe UI", 8.5f);
             FontNav = new Font("Segoe UI Semibold", 9.75f);
-            // Заголовки, подписи и цифры — Bahnschrift (есть в Windows 10 1709+), иначе Segoe UI
-            FontSmallBold = Display("Bahnschrift SemiBold", 8.5f, "Segoe UI Semibold", 8f);
-            FontTitle = Display("Bahnschrift SemiBold", 19f, "Segoe UI Semibold", 17f);
-            FontH2 = Display("Bahnschrift SemiBold", 11f, "Segoe UI Semibold", 10.5f);
-            FontBig = Display("Bahnschrift SemiBold", 20f, "Segoe UI Semibold", 16f);
-            FontLogo = Display("Bahnschrift SemiBold", 11f, "Segoe UI Semibold", 11f);
-            FontLabel = Display("Bahnschrift SemiBold", 8f, "Segoe UI Semibold", 7.5f);
-            FontNum = Display("Bahnschrift", 10f, "Segoe UI", 9.75f);
+            // GlassWise: системный шрифт Segoe UI; заголовки жирные (28 px / 20 px), подписи разделов 13 px полужирные
+            FontSmallBold = new Font("Segoe UI Semibold", 8.5f);
+            FontTitle = new Font("Segoe UI", 20f, FontStyle.Bold);
+            FontH2 = new Font("Segoe UI", 11.25f, FontStyle.Bold);
+            FontBig = new Font("Segoe UI Semibold", 20f);
+            FontLogo = new Font("Segoe UI", 11.25f, FontStyle.Bold);
+            FontLabel = new Font("Segoe UI Semibold", 9f);
+            FontNum = new Font("Segoe UI", 9.75f);
             string icons = HasFont("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
             FontIcon = new Font(icons, 11f);
             FontIconBig = new Font(icons, 15f);
@@ -228,7 +298,10 @@ namespace Tunex
         public const string Speed = "\uEC4A";
         public const string Settings = "\uE713";
         public const string Palette = "\uE790";
+        public const string Sun = "\uE706";
+        public const string Moon = "\uE708";
         public const string Search = "\uE721";
+        public const string Fps = "\uE9D2";
         public const string Save = "\uE74E";
         public const string Network = "";
         public const string Broom = "";
