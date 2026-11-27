@@ -388,7 +388,7 @@ namespace Tunex
         public enum Phase { Idle, Countdown, Recording }
         public static Phase State = Phase.Idle;
         public static int Duration = 60;          // секунд записи
-        public const int Delay = 10;              // секунд, чтобы переключиться в игру
+        public static int Delay = 10;             // секунд, чтобы переключиться в игру (выбирается на странице)
         public static DateTime PhaseEnd;
         public static string Status = "";         // для страницы: что сейчас происходит
         public static FpsRun Last;                // последний результат этого запуска Tunex

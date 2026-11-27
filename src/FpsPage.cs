@@ -129,19 +129,34 @@ namespace Tunex
     class FpsMeterCard : BufferedControl
     {
         readonly FlatButton start, cancel, finish;
-        readonly JumpBar dur;
+        readonly Stepper dur, delay;
         FpsMeter.Phase drawn = (FpsMeter.Phase)(-1);
         static bool downloading;
 
-        static readonly string[][] Steps = {
-            new string[] { "Запустите игру", "Встаньте там, где обычно много действия, или включите встроенный тест игры." },
-            new string[] { "Нажмите «Начать замер»", "У вас будет " + FpsMeter.Delay + " секунд, чтобы вернуться в игру. Короткий сигнал — запись пошла." },
-            new string[] { "Играйте как обычно", "Двойной сигнал — замер закончен. Результат появится ниже." } };
+        // Длительность: каждая минута до 10, дальше через 5 минут — до 3 часов
+        static int[] Minutes()
+        {
+            List<int> l = new List<int>();
+            for (int i = 1; i <= 10; i++) l.Add(i);
+            for (int i = 15; i <= 180; i += 5) l.Add(i);
+            return l.ToArray();
+        }
+
+        static string[][] Steps()
+        {
+            return new string[][] {
+                new string[] { "Запустите игру", "Встаньте там, где обычно много действия, или включите встроенный тест игры. Для целой катки поставьте её длительность." },
+                new string[] { "Нажмите «Начать замер»", FpsMeter.Delay > 0
+                    ? "У вас будет " + FpsMeter.Delay + " с, чтобы вернуться в игру. Короткий сигнал — запись пошла."
+                    : "Запись начнётся сразу — короткий сигнал. Удобно, если игра уже открыта во втором окне." },
+                new string[] { "Играйте как обычно", "Двойной сигнал — замер закончен. Закончить раньше — Ctrl + Shift + F9. Результат появится ниже." } };
+        }
 
         public FpsMeterCard()
         {
-            int d = App.Manager.State.FpsDuration;
-            FpsMeter.Duration = d == 30 || d == 120 ? d : 60;
+            AppState st = App.Manager.State;
+            FpsMeter.Duration = Math.Max(60, (int)Math.Round((st.FpsDuration > 0 ? st.FpsDuration : 60) / 60.0) * 60);
+            FpsMeter.Delay = Math.Max(0, Math.Min(60, st.FpsDelay));
 
             start = new FlatButton("Начать замер", true, Icons.Play);
             start.Click += delegate { Begin(); };
@@ -149,17 +164,21 @@ namespace Tunex
             cancel.Click += delegate { FpsMeter.Cancel(); Refresh_(); };
             finish = new FlatButton("Закончить сейчас", true, Icons.Check);
             finish.Click += delegate { FpsMeter.FinishNow(); Refresh_(); };
-            dur = new JumpBar();
-            dur.Add("30", null, "30 с"); dur.Add("60", null, "1 мин"); dur.Add("120", null, "2 мин");
-            dur.Width = Theme.S(28) * 3 + Theme.S(8) + Theme.Measure("30 с", Theme.FontBodyBold).Width + Theme.Measure("1 мин", Theme.FontBodyBold).Width + Theme.Measure("2 мин", Theme.FontBodyBold).Width;
-            dur.Selected = FpsMeter.Duration.ToString(CultureInfo.InvariantCulture);
-            dur.Jump += delegate(string k)
+
+            dur = new Stepper(Minutes(), FpsMeter.Duration / 60, delegate(int v) { return v < 60 ? v + " мин" : v % 60 == 0 ? v / 60 + " ч" : v / 60 + " ч " + v % 60 + " мин"; });
+            dur.Changed += delegate(int v)
             {
-                FpsMeter.Duration = int.Parse(k, CultureInfo.InvariantCulture);
-                dur.Selected = k; dur.Invalidate();
-                App.Manager.State.FpsDuration = FpsMeter.Duration; App.Manager.State.Save();
+                FpsMeter.Duration = v * 60;
+                st.FpsDuration = FpsMeter.Duration; st.Save();
             };
-            Controls.Add(start); Controls.Add(cancel); Controls.Add(finish); Controls.Add(dur);
+            delay = new Stepper(new int[] { 0, 3, 5, 10, 15, 20, 30, 45, 60 }, FpsMeter.Delay, delegate(int v) { return v == 0 ? "сразу" : v + " с"; });
+            delay.Changed += delegate(int v)
+            {
+                FpsMeter.Delay = v;
+                st.FpsDelay = v; st.Save();
+                Relayout();
+            };
+            Controls.Add(start); Controls.Add(cancel); Controls.Add(finish); Controls.Add(dur); Controls.Add(delay);
             Refresh_();
         }
 
@@ -215,20 +234,30 @@ namespace Tunex
         }
 
         static int P { get { return Theme.S(22); } }
+        static int Pi { get { return Theme.S(16); } }      // отступ внутри карточки шага
+        static int Gap { get { return Theme.S(12); } }
 
         bool Wide { get { return Width >= Theme.S(760); } }
 
+        const string DurLabel = "Длительность", DelayLabel = "Отсчёт перед стартом";
+
+        int stepsY;
+
+        int StepW { get { return Wide ? (Width - P * 2 - Gap * 2) / 3 : Width - P * 2; } }
+
+        int StepH(string[] s)
+        {
+            int tw = StepW - Pi * 2;
+            return Pi + Theme.S(26) + Theme.S(10) + Theme.Measure(s[1], Theme.FontSmall, tw).Height + Pi;
+        }
+
         int StepsHeight()
         {
-            if (Wide)
-            {
-                int cw = (Width - P * 2 - Theme.S(20) * 2) / 3, h = 0;
-                foreach (string[] s in Steps) h = Math.Max(h, Theme.S(44) + Theme.Measure(s[1], Theme.FontSmall, cw).Height);
-                return h;
-            }
+            string[][] steps = Steps();
+            if (Wide) { int h = 0; foreach (string[] s in steps) h = Math.Max(h, StepH(s)); return h; }
             int t = 0;
-            foreach (string[] s in Steps) t += Theme.S(30) + Theme.Measure(s[1], Theme.FontSmall, Width - P * 2 - Theme.S(40)).Height + Theme.S(12);
-            return t;
+            foreach (string[] s in steps) t += StepH(s) + Gap;
+            return t - Gap;
         }
 
         void Relayout()
@@ -236,14 +265,22 @@ namespace Tunex
             if (Width <= 0) return;
             FpsMeter.Phase ph = FpsMeter.State;
             bool idle = ph == FpsMeter.Phase.Idle;
-            start.Visible = dur.Visible = idle;
+            start.Visible = dur.Visible = delay.Visible = idle;
             cancel.Visible = !idle;
             finish.Visible = ph == FpsMeter.Phase.Recording;
             int h;
             if (idle)
             {
-                dur.Location = new Point(Width - P - dur.Width, P - Theme.S(3));
-                int y = P + Theme.S(46) + StepsHeight() + Theme.S(10);
+                // Строка выбора времени: «Длительность [− 45 мин +]   Отсчёт перед стартом [− 10 с +]»; узко — в две строки
+                int sy = P + Theme.S(42);
+                int l1 = Theme.Measure(DurLabel, Theme.FontSmall).Width + Theme.S(12);
+                int l2 = Theme.Measure(DelayLabel, Theme.FontSmall).Width + Theme.S(12);
+                dur.Location = new Point(P + l1, sy);
+                int x2 = dur.Right + Theme.S(32);
+                if (x2 + l2 + delay.Width <= Width - P) delay.Location = new Point(x2 + l2, sy);
+                else delay.Location = new Point(P + l2, sy + dur.Height + Theme.S(10));
+                stepsY = delay.Bottom + Theme.S(20);
+                int y = stepsY + StepsHeight() + Theme.S(18);
                 start.Location = new Point(P, y);
                 h = y + start.Height + P;
             }
@@ -260,6 +297,12 @@ namespace Tunex
 
         protected override void OnSizeChanged(EventArgs e) { base.OnSizeChanged(e); Relayout(); }
 
+        static string Clock(float sec)
+        {
+            int s = (int)sec;
+            return s >= 3600 ? (s / 3600) + ":" + (s / 60 % 60).ToString("00") + ":" + (s % 60).ToString("00") : (s / 60) + ":" + (s % 60).ToString("00");
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; Theme.Smooth(g);
@@ -269,20 +312,21 @@ namespace Tunex
             if (ph == FpsMeter.Phase.Idle)
             {
                 Theme.DrawText(g, "Новый замер", Theme.FontH2, Theme.Text, new Rectangle(P, P, w, Theme.S(26)), TextFormatFlags.VerticalCenter);
-                Theme.DrawText(g, "Сколько длится:", Theme.FontSmall, Theme.Text2, new Rectangle(P, P, dur.Left - P - Theme.S(10), Theme.S(28)), TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-                int y = P + Theme.S(46);
+                int l1 = Theme.Measure(DurLabel, Theme.FontSmall).Width + 2;
+                Theme.DrawText(g, DurLabel, Theme.FontSmall, Theme.Text2, new Rectangle(dur.Left - Theme.S(12) - l1, dur.Top, l1, dur.Height), TextFormatFlags.VerticalCenter);
+                int l2 = Theme.Measure(DelayLabel, Theme.FontSmall).Width + 2;
+                Theme.DrawText(g, DelayLabel, Theme.FontSmall, Theme.Text2, new Rectangle(delay.Left - Theme.S(12) - l2, delay.Top, l2, delay.Height), TextFormatFlags.VerticalCenter);
+
+                string[][] steps = Steps();
+                int y = stepsY;
                 if (Wide)
                 {
-                    int gap = Theme.S(20), cw = (w - gap * 2) / 3;
-                    for (int i = 0; i < 3; i++) Step(g, i, P + i * (cw + gap), y, cw);
+                    int sh = StepsHeight();
+                    for (int i = 0; i < 3; i++) Step(g, steps, i, P + i * (StepW + Gap), y, StepW, sh);
                 }
                 else
-                    for (int i = 0; i < 3; i++)
-                    {
-                        int tw = w - Theme.S(40);
-                        Step(g, i, P, y, w);
-                        y += Theme.S(30) + Theme.Measure(Steps[i][1], Theme.FontSmall, tw).Height + Theme.S(12);
-                    }
+                    for (int i = 0; i < 3; i++) { int sh = StepH(steps[i]); Step(g, steps, i, P, y, StepW, sh); y += sh + Gap; }
+
                 string hint = "Уже в игре? Нажмите Ctrl + Shift + F9 — замер начнётся сразу. Ещё раз — закончится раньше.";
                 int hx = start.Right + Theme.S(16);
                 Theme.DrawText(g, hint, Theme.FontSmall, Theme.Text2, new Rectangle(hx, start.Top, Math.Max(Theme.S(50), Width - P - hx), start.Height),
@@ -304,7 +348,7 @@ namespace Tunex
             float el = Math.Min(FpsMeter.Elapsed, FpsMeter.Duration);
             string game = FpsMeter.GameName;
             Theme.DrawText(g, "Идёт запись" + (game != null ? " · " + game : ""), Theme.FontH2, Theme.Text, new Rectangle(P, P, w, Theme.S(26)), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            Theme.DrawText(g, (int)el + " с из " + FpsMeter.Duration + " с. Играйте как обычно — двойной сигнал означает конец.", Theme.FontSmall, Theme.Text2,
+            Theme.DrawText(g, Clock(el) + " из " + Clock(FpsMeter.Duration) + ". Играйте как обычно — двойной сигнал означает конец.", Theme.FontSmall, Theme.Text2,
                 new Rectangle(P, P + Theme.S(30), w, Theme.S(20)), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             float live = FpsMeter.LiveFps;
             if (live < 0)
@@ -323,22 +367,82 @@ namespace Tunex
             if (k > 0.01f) Theme.FillRound(g, Theme.Accent, new RectangleF(bar.X, bar.Y, bar.Width * k, bar.Height), bar.Height / 2);
         }
 
-        void Step(Graphics g, int i, int x, int y, int cw)
+        // Шаг — в тихой карточке: чуть темнее фона, без рамки
+        void Step(Graphics g, string[][] steps, int i, int x, int y, int cw, int ch)
         {
+            RectangleF box = new RectangleF(x, y, cw, ch);
+            Theme.FillRound(g, Theme.CardInner, box, Theme.Sf(12));
             int d = Theme.S(26);
-            Theme.FillRound(g, Theme.AccentSoft, new RectangleF(x, y, d, d), d / 2f);
-            Theme.DrawText(g, (i + 1).ToString(), Theme.FontBodyBold, Theme.AccentText, new Rectangle(x, y, d, d), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            if (Wide)
+            int ix = x + Pi, iy = y + Pi;
+            Theme.FillRound(g, Theme.AccentSoft, new RectangleF(ix, iy, d, d), d / 2f);
+            Theme.DrawText(g, (i + 1).ToString(), Theme.FontBodyBold, Theme.AccentText, new Rectangle(ix, iy, d, d), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            Theme.DrawText(g, steps[i][0], Theme.FontBodyBold, Theme.Text, new Rectangle(ix + d + Theme.S(10), iy, cw - Pi * 2 - d - Theme.S(10), d), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            Theme.DrawText(g, steps[i][1], Theme.FontSmall, Theme.Text2, new Rectangle(ix, iy + d + Theme.S(10), cw - Pi * 2, ch - Pi * 2 - d - Theme.S(10) + Theme.S(4)), TextFormatFlags.WordBreak);
+        }
+    }
+
+    // ---------------------------------------------------------------- Выбор числа: «−  45 мин  +» (клик, удержание, колесо мыши)
+    class Stepper : BufferedControl
+    {
+        readonly int[] values;
+        readonly Func<int, string> format;
+        int index, hover = -2, held;
+        readonly System.Windows.Forms.Timer repeat = new System.Windows.Forms.Timer();
+        public event Action<int> Changed;
+
+        public Stepper(int[] values, int value, Func<int, string> format)
+        {
+            this.values = values; this.format = format;
+            index = 0;
+            for (int i = 0; i < values.Length; i++) if (values[i] <= value) index = i;
+            int widest = 0;
+            foreach (int v in values) widest = Math.Max(widest, Theme.Measure(format(v), Theme.FontBodyBold).Width);
+            Size = new Size(widest + Theme.S(34) * 2 + Theme.S(12), Theme.S(34));
+            Cursor = Cursors.Hand;
+            repeat.Tick += delegate { repeat.Interval = 70; Step(held); };
+            Disposed += delegate { repeat.Dispose(); };
+        }
+
+        public int Value { get { return values[index]; } }
+
+        int Zone(int x) { int b = Theme.S(34); return x < b ? -1 : x > Width - b ? 1 : 0; }
+
+        void Step(int dir)
+        {
+            int n = Math.Max(0, Math.Min(values.Length - 1, index + dir));
+            if (n == index) return;
+            index = n; Invalidate();
+            if (Changed != null) Changed(Value);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            int z = Zone(e.X);
+            if (z == 0) return;
+            held = z; Step(z);
+            repeat.Interval = 400; repeat.Start();
+        }
+        protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); repeat.Stop(); }
+        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int z = Zone(e.X); if (z != hover) { hover = z; Invalidate(); } }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -2; repeat.Stop(); Invalidate(); }
+        protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); Step(e.Delta > 0 ? 1 : -1); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics; Theme.Smooth(g);
+            RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+            Theme.FillRound(g, Theme.Field, r, r.Height / 2f);
+            Theme.DrawRound(g, Theme.FieldEdge, r, r.Height / 2f, 1f);
+            int b = Theme.S(34);
+            for (int s = -1; s <= 1; s += 2)
             {
-                Theme.DrawText(g, Steps[i][0], Theme.FontBodyBold, Theme.Text, new Rectangle(x + d + Theme.S(10), y, cw - d - Theme.S(10), d), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                Theme.DrawText(g, Steps[i][1], Theme.FontSmall, Theme.Text2, new Rectangle(x, y + Theme.S(36), cw, Theme.S(80)), TextFormatFlags.WordBreak);
+                bool can = s < 0 ? index > 0 : index < values.Length - 1;
+                Rectangle br = s < 0 ? new Rectangle(0, 0, b, Height) : new Rectangle(Width - b, 0, b, Height);
+                if (hover == s && can) Theme.FillRound(g, Theme.CardHover, new RectangleF(br.X + Theme.S(3), Theme.S(3), br.Width - Theme.S(6), Height - Theme.S(6)), (Height - Theme.S(6)) / 2f);
+                Theme.DrawText(g, s < 0 ? "−" : "+", Theme.FontCellTitle, can ? Theme.Text : Theme.Text3, br, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
-            else
-            {
-                int tx = x + d + Theme.S(14);
-                Theme.DrawText(g, Steps[i][0], Theme.FontBodyBold, Theme.Text, new Rectangle(tx, y, cw - d - Theme.S(14), d), TextFormatFlags.VerticalCenter);
-                Theme.DrawText(g, Steps[i][1], Theme.FontSmall, Theme.Text2, new Rectangle(tx, y + Theme.S(28), cw - d - Theme.S(14), Theme.S(80)), TextFormatFlags.WordBreak);
-            }
+            Theme.DrawText(g, format(Value), Theme.FontBodyBold, Theme.Text, new Rectangle(b, 0, Width - b * 2, Height), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
 

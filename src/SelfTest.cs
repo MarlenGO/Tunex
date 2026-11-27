@@ -215,6 +215,7 @@ namespace Tunex
                     List<PingTarget> valve = NetPing.Servers("cs2");
                     check(valve.Count >= 10, "пинг: серверов CS2 в списке " + valve.Count + (valve.Count > 0 ? " (" + valve[0].Name + "…)" : ""));
                     check(NetPing.Servers("valorant").Count >= 10, "пинг: дата-центры для Valorant");
+                    check(NetPing.Servers("deadlock").Count >= 10 && NetPing.Servers("apex").Count >= 10 && NetPing.Servers("rust").Count >= 10 && NetPing.Approx("rust") && !NetPing.Approx("deadlock"), "пинг: Deadlock (список Valve), Apex и Rust");
 
                     List<AppGroup> apps = Unload.Scan();
                     bool bad = false;

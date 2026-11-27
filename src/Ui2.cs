@@ -111,13 +111,18 @@ namespace Tunex
             int y = (Height - th - Theme.S(8) - BadgeH) / 2;
             Theme.DrawText(g, Tweak.Title, Theme.FontCellTitle, dim ? Theme.Text3 : Theme.Text, new Rectangle(Pad, y, tw, th), TextFormatFlags.WordBreak);
 
-            // Статус — плашка своим цветом
-            Color sc = dim ? Theme.Text3 : state.Color;
+            // Статус — тихо: маленькая точка цвета состояния и серый текст, без яркой плашки
             string st = state.Status ?? "";
-            int bw = Math.Min(tw, Theme.Measure(st, Theme.FontSmallBold).Width + Theme.S(18));
-            Rectangle br = new Rectangle(Pad, y + th + Theme.S(8), bw, BadgeH);
-            Theme.FillRound(g, Theme.Alpha(sc, dim ? 22 : 38), br, br.Height / 2f);
-            Theme.DrawText(g, st, Theme.FontSmallBold, sc, br, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            Rectangle br = new Rectangle(Pad, y + th + Theme.S(8), tw, BadgeH);
+            int dot = Theme.S(7);
+            Color dc = dim ? Theme.Alpha(Theme.Text3, 120)
+                : state.On ? Theme.Alpha(Theme.Green, 200)
+                : state.AdminBlocked ? Theme.Alpha(Theme.Orange, 190)
+                : Tweak.Rec == Recommend.All ? Theme.Alpha(Theme.Orange, 190)
+                : Theme.Alpha(Theme.Text3, 150);
+            using (SolidBrush b = new SolidBrush(dc)) g.FillEllipse(b, br.X, br.Y + (br.Height - dot) / 2f, dot, dot);
+            Theme.DrawText(g, st, Theme.FontSmall, dim ? Theme.Text3 : Theme.Text2, new Rectangle(br.X + dot + Theme.S(8), br.Y, br.Width - dot - Theme.S(8), br.Height),
+                TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
         }
     }

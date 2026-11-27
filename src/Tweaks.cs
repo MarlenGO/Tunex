@@ -844,6 +844,7 @@ namespace Tunex
         public List<FpsRun> FpsRuns = new List<FpsRun>();   // замеры FPS: по кнопке и за всю игру
         public bool GameSummary;                 // показывать итог после игры (запись FPS, пока идёт игра из списка)
         public int FpsDuration;                  // длительность замера по кнопке, секунд (0 — 60)
+        public int FpsDelay = 10;                // отсчёт перед замером, секунд
         public List<string> CleanPick = new List<string>(), CleanSkip = new List<string>();   // «Обслуживание»: что чистить сверх / вопреки обычному выбору
         public List<string> UnloadPick = new List<string>(), UnloadSkip = new List<string>();   // «Перед игрой»: что закрывать сверх / вопреки обычному выбору
         public List<ClosedApp> Unloaded = new List<ClosedApp>();   // закрытые программы, которые надо вернуть

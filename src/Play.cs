@@ -319,9 +319,14 @@ namespace Tunex
 
     static class NetPing
     {
-        public static readonly string[] Games = { "cs2", "dota2", "valorant" };
-        public static string Title(string game) { return game == "cs2" ? "CS2" : game == "dota2" ? "Dota 2" : "Valorant"; }
-        static int AppId(string game) { return game == "dota2" ? 570 : 730; }
+        public static readonly string[] Games = { "cs2", "dota2", "deadlock", "valorant", "apex", "rust" };
+        public static string Title(string game)
+        {
+            switch (game) { case "cs2": return "CS2"; case "dota2": return "Dota 2"; case "deadlock": return "Deadlock"; case "apex": return "Apex Legends"; case "rust": return "Rust"; default: return "Valorant"; }
+        }
+        static int AppId(string game) { return game == "dota2" ? 570 : game == "deadlock" ? 1422450 : 730; }
+        // У Riot, EA и серверов Rust нет открытого списка — меряем до дата-центров Amazon в крупных городах (близкая оценка)
+        public static bool Approx(string game) { return game == "valorant" || game == "apex" || game == "rust"; }
 
         // Valorant: у Riot нет открытого списка серверов — меряем до дата-центров Amazon в тех же городах
         static readonly string[][] Aws = {
@@ -352,11 +357,11 @@ namespace Tunex
 
         static string CacheDir { get { return Path.Combine(AppState.Dir, "net"); } }
 
-        // Серверы игры: для CS2 и Dota 2 — список Valve (кэш на 7 дней), для Valorant — Amazon
+        // Серверы игры: для CS2, Dota 2 и Deadlock — список Valve (кэш на 7 дней), для Valorant, Apex и Rust — Amazon
         public static List<PingTarget> Servers(string game)
         {
             List<PingTarget> list = new List<PingTarget>();
-            if (game == "valorant")
+            if (Approx(game))
             {
                 foreach (string[] a in Aws) { PingTarget t = new PingTarget(); t.Name = a[1]; t.Host = "dynamodb." + a[0] + ".amazonaws.com"; list.Add(t); }
                 return list;
