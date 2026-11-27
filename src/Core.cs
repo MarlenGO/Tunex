@@ -303,6 +303,8 @@ namespace Tunex
         public const string Search = "\uE721";
         public const string Fps = "\uE9D2";
         public const string Save = "\uE74E";
+        public const string Lag = "\uE9D9";      // \u00AB\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430\u00BB
+        public const string Repair = "\uE90F";   // \u0433\u0430\u0435\u0447\u043D\u044B\u0439 \u043A\u043B\u044E\u0447
         public const string Network = "";
         public const string Broom = "";
     }

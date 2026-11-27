@@ -115,7 +115,7 @@ namespace Tunex
             }
             history.Footer = all.Count == 0 ? "Замеров пока нет." : "Нажмите на строку, чтобы открыть замер. Хранятся последние " + FpsHistory.Keep + ".";
             history.Visible = true;
-            history.Invalidate();
+            history.Done();
             PerformLayout();
         }
 

@@ -196,6 +196,159 @@ namespace Tunex
                     check(a1.ChannelKey == a2.ChannelKey && a1.ChannelKey != b2.ChannelKey, "каналы памяти по названию слотов: A1=" + a1.ChannelKey + " A2=" + a2.ChannelKey + " B2=" + b2.ChannelKey);
                 }
 
+                // Перед игрой: названия серверов, статистика пинга, итог, список программ, «Не беспокоить» (только чтение)
+                {
+                    check(NetPing.City("Stockholm - Kista (Sweden)") == "Стокгольм" && NetPing.City("Datapacket Frankfurt (Germany)") == "Франкфурт"
+                        && NetPing.City("Alibaba Cloud Beijing - Mobile (China)") == "Пекин (Mobile)" && NetPing.City("Tokyo Koto City (Japan)") == "Токио",
+                        "пинг: названия городов из списка Valve");
+                    PingTarget pt = new PingTarget(); pt.Sent = 20; pt.Lost = 1; foreach (int v in new int[] { 40, 44, 40, 48 }) pt.Rtt.Add(v);
+                    check(Math.Abs(pt.Avg - 43) < 0.01 && Math.Abs(pt.Jitter - 16f / 3) < 0.01 && Math.Abs(pt.Loss - 5) < 0.01 && pt.Unstable,
+                        "пинг: средний " + pt.Avg + ", скачки " + pt.Jitter + ", потери " + pt.Loss + "%");
+                    PingTarget good = new PingTarget(); good.Name = "Стокгольм"; good.Sent = 20; for (int i = 0; i < 20; i++) good.Rtt.Add(38 + i % 2);
+                    PingTarget wifi = new PingTarget(); wifi.Router = true; wifi.Sent = 20; wifi.Lost = 2; for (int i = 0; i < 18; i++) wifi.Rtt.Add(i % 2 == 0 ? 3 : 40);
+                    PingTarget lan = new PingTarget(); lan.Router = true; lan.Sent = 20; for (int i = 0; i < 20; i++) lan.Rtt.Add(1);
+                    string vt; System.Drawing.Color vc;
+                    string v1 = NetPing.Verdict("cs2", new List<PingTarget> { good }, lan, out vt, out vc);
+                    string v2 = NetPing.Verdict("cs2", new List<PingTarget> { good }, wifi, out vt, out vc);
+                    string v3 = NetPing.Verdict("cs2", new List<PingTarget>(), null, out vt, out vc);
+                    check(v1 == "Интернет отлично подходит для CS2" && v2 == "Проблема в домашней сети" && v3 == "Серверы CS2 не ответили", "пинг: итог — " + v1 + " / " + v2 + " / " + v3);
+                    List<PingTarget> valve = NetPing.Servers("cs2");
+                    check(valve.Count >= 10, "пинг: серверов CS2 в списке " + valve.Count + (valve.Count > 0 ? " (" + valve[0].Name + "…)" : ""));
+                    check(NetPing.Servers("valorant").Count >= 10, "пинг: дата-центры для Valorant");
+
+                    List<AppGroup> apps = Unload.Scan();
+                    bool bad = false;
+                    foreach (AppGroup a in apps) { log.AppendLine("      программа: " + a.Name + " [" + a.Kind + "] " + Unload.Size(a.Memory) + ", окон " + a.Windows.Count); if (a.Key == "explorer" || a.Key == "tunex" || a.Key == "steam") bad = true; }
+                    check(!bad, "разгрузка: найдено программ " + apps.Count + ", системных и Steam среди них нет");
+                    // Закрыть и вернуть по-настоящему — на Блокноте
+                    foreach (System.Diagnostics.Process old in System.Diagnostics.Process.GetProcessesByName("notepad")) old.Dispose();
+                    if (System.Diagnostics.Process.GetProcessesByName("notepad").Length == 0)
+                    {
+                        System.Diagnostics.Process np = System.Diagnostics.Process.Start("notepad.exe");
+                        np.WaitForInputIdle(5000); System.Threading.Thread.Sleep(800);
+                        AppGroup ng = Unload.Probe("notepad");
+                        List<string> nf = new List<string>();
+                        List<ClosedApp> nc = Unload.Close(new List<AppGroup> { ng }, nf);
+                        check(ng.Windows.Count > 0 && nc.Count == 1 && nf.Count == 0 && System.Diagnostics.Process.GetProcessesByName("notepad").Length == 0,
+                            "разгрузка: Блокнот закрыт как крестиком (окон было " + ng.Windows.Count + ")");
+                        List<string> back = Unload.Restore(nc);
+                        System.Threading.Thread.Sleep(2500);
+                        System.Diagnostics.Process[] again = System.Diagnostics.Process.GetProcessesByName("notepad");
+                        check(back.Count == 1 && again.Length > 0, "разгрузка: Блокнот открыт снова");
+                        foreach (System.Diagnostics.Process x in again) { try { x.Kill(); } catch { } x.Dispose(); }
+                    }
+                    else log.AppendLine("      разгрузка: Блокнот уже открыт — проверку закрытия пропускаю");
+
+                    int focus = QuietMode.ReadFocus();
+                    check(focus >= 0 && focus <= 2, "не беспокоить: режим уведомлений читается (сейчас " + focus + ")");
+                    if (focus >= 0 && focus != 2)
+                    {
+                        bool on = QuietMode.SetFocus(2);
+                        bool off = QuietMode.SetFocus(focus);
+                        check(on && off, "не беспокоить: включается и возвращается обратно");
+                    }
+                }
+
+                // Разбор лагов: выдуманные 2 минуты → причины; настоящая запись процессов и дисков
+                {
+                    LagMoment d1 = LagAnalyzer.Analyze(FakeLag("disk"), "cs2");
+                    check(d1.Main.Title.StartsWith("Диск D: был занят") && d1.Main.Text.Contains("Защитник Windows") && d1.Main.At >= 100,
+                        "лаги: диск и Защитник — " + d1.Main.Title + " / " + d1.Main.Text);
+                    LagMoment d2 = LagAnalyzer.Analyze(FakeLag("cpu"), "cs2");
+                    check(d2.Main.Title == "Google Chrome занимал процессор на 45%" && d2.Main.Action == "prep", "лаги: браузер занял процессор — " + d2.Main.Title);
+                    LagMoment d3 = LagAnalyzer.Analyze(FakeLag("ram"), "cs2");
+                    check(d3.Main.Title == "Закончилась оперативная память" && d3.Main.Text.Contains("игра (5,5 ГБ)"), "лаги: память — " + d3.Main.Text);
+                    LagMoment d4 = LagAnalyzer.Analyze(FakeLag("calm"), "cs2");
+                    check(d4.Calm && d4.Causes.Count == 1, "лаги: спокойный ПК — " + d4.Main.Title);
+                    LagMoment d5 = LagAnalyzer.Analyze(FakeLag("game"), "cs2");
+                    check(d5.Main.Text.StartsWith("Игра сама подгружала") && d5.Main.Action == "pc", "лаги: игра читает с диска — " + d5.Main.Text);
+                    LagMoment d6 = LagAnalyzer.Analyze(FakeLag("update"), "cs2");
+                    bool upd = false; foreach (LagCause c in d6.Causes) if (c.Title == "В этот момент запустилась программа: Обновления Windows") upd = true;
+                    check(upd, "лаги: запуск обновлений Windows замечен");
+                    string js = new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(d1);
+                    LagMoment back = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<LagMoment>(js);
+                    check(back.Causes.Count == d1.Causes.Count && back.Cpu.Length == 120 && back.Main.Title == d1.Main.Title && !js.Contains("\"Main\""), "лаги: разбор сохраняется и читается (" + js.Length / 1024 + " КБ)");
+
+                    for (int i = 0; i < 3; i++) { LagRecorder.TickNow(); System.Threading.Thread.Sleep(1000); }
+                    List<LagFrame> fr = LagRecorder.Frames;
+                    LagFrame lf = fr.Count > 0 ? fr[fr.Count - 1] : null;
+                    check(fr.Count >= 2 && lf.Top.Count > 0 && lf.AvailGb > 0, "лаги: запись идёт, кадров " + fr.Count + (lf != null ? ", активных программ " + lf.Top.Count : ""));
+                    if (lf != null)
+                    {
+                        log.AppendLine("      диск " + (lf.DiskName ?? "?") + " занят " + lf.Disk + "%, чтение/запись " + lf.DiskMb.ToString("0.0") + " МБ/с, ошибок страниц " + lf.Faults.ToString("0") + "/с");
+                        foreach (ProcLoad pl in lf.Top) log.AppendLine("      " + pl.Name + ": процессор " + pl.Cpu.ToString("0.0") + "%, диск " + pl.DiskMb.ToString("0.00") + " МБ/с, память " + pl.MemGb.ToString("0.00") + " ГБ");
+                    }
+                    check(lf != null && lf.Disk >= 0, "лаги: занятость дисков читается");
+                    LagRecorder.Stop();
+                }
+
+                // Обслуживание: частота мыши, очистка (на временной папке), автозагрузка (на выдуманной записи), пинг под нагрузкой
+                {
+                    foreach (int hz in new int[] { 125, 500, 1000 })
+                    {
+                        MouseRate mr = new MouseRate(); long tk = 0; Random rnd = new Random(hz);
+                        for (int i = 0; i < hz * 4; i++)
+                        {
+                            tk += System.Diagnostics.Stopwatch.Frequency / hz + rnd.Next(-200, 200);
+                            if (i % (hz / 2) == hz / 4) tk += System.Diagnostics.Stopwatch.Frequency / 5;   // мышь остановилась
+                            mr.Add(tk);
+                        }
+                        int got = mr.Measured();
+                        check(MouseRate.Nominal(got) == hz, "мышь: " + hz + " Гц определена как " + got + " → " + MouseRate.Nominal(got));
+                    }
+
+                    string dir = Path.Combine(Path.GetTempPath(), "tunex-clean-test");
+                    try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+                    Directory.CreateDirectory(Path.Combine(dir, @"a\b"));
+                    string oldF = Path.Combine(dir, @"a\b\old.tmp"), newF = Path.Combine(dir, "new.tmp");
+                    File.WriteAllBytes(oldF, new byte[5000]); File.SetLastWriteTime(oldF, DateTime.Now.AddDays(-10));
+                    File.WriteAllBytes(newF, new byte[3000]);
+                    CleanItem ci = new CleanItem(); ci.Key = "test"; ci.MinAgeHours = 168; ci.Dirs.Add(dir);
+                    Cleaner.Measure(ci);
+                    check(ci.Size == 5000 && ci.Count == 1, "очистка: найден только старый файл (" + ci.Size + " байт)");
+                    long fr = Cleaner.Clean(ci);
+                    check(fr == 5000 && !File.Exists(oldF) && File.Exists(newF) && !Directory.Exists(Path.Combine(dir, "a")) && Directory.Exists(dir), "очистка: старый удалён, новый и сама папка на месте");
+                    try { Directory.Delete(dir, true); } catch { }
+                    List<CleanItem> items = Cleaner.Items();
+                    foreach (CleanItem x in items) { Cleaner.Measure(x); log.AppendLine("      чистка: " + x.Title + " — " + Unload.Size(x.Size) + (x.Blocked != null ? " (" + x.Blocked + ")" : "")); }
+                    check(items.Count >= 4, "очистка: разделов " + items.Count);
+
+                    check(Startup.ExeOf(@"""C:\Program Files\App\app.exe"" --min") ==@"C:\Program Files\App\app.exe"
+                        && Startup.ExeOf(@"C:\Tools\run.exe /silent") == @"C:\Tools\run.exe", "автозагрузка: путь к программе из команды");
+                    const string run = @"Software\Microsoft\Windows\CurrentVersion\Run";
+                    Reg.Set("HKCU", run, "TunexSelfTest", @"C:\Windows\notepad.exe", Microsoft.Win32.RegistryValueKind.String);
+                    try
+                    {
+                        StartupItem st = Startup.List().Find(delegate(StartupItem x) { return x.ValueName == "TunexSelfTest"; });
+                        bool found = st != null && st.Enabled;
+                        string e1 = st != null ? Startup.SetEnabled(st, false) : "нет";
+                        StartupItem st2 = Startup.List().Find(delegate(StartupItem x) { return x.ValueName == "TunexSelfTest"; }); bool offRead = st2 != null && !st2.Enabled;
+                        string e2 = st2 != null ? Startup.SetEnabled(st2, true) : "нет";
+                        StartupItem st3 = Startup.List().Find(delegate(StartupItem x) { return x.ValueName == "TunexSelfTest"; });
+                        check(found && e1 == null && st2 != null && offRead && e2 == null && st3 != null && st3.Enabled, "автозагрузка: выключить и включить (как в Диспетчере задач) — найдено " + found + ", ошибки " + e1 + "/" + e2 + ", после выключения " + (!offRead).ToString() + ", после включения " + (st3 != null ? st3.Enabled.ToString() : "нет"));
+                    }
+                    finally
+                    {
+                        Reg.Delete("HKCU", run, "TunexSelfTest");
+                        Reg.Delete("HKCU", @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", "TunexSelfTest");
+                    }
+                    List<StartupItem> all = Startup.List(); Startup.AttachSlow(all);
+                    List<BootInfo> boots = Startup.Boots(5);
+                    log.AppendLine("      автозагрузка: программ " + all.Count + ", загрузок в журнале " + boots.Count + (boots.Count > 0 ? ", последняя " + boots[0].Seconds + " с" : "") + (Startup.BootError != null ? ", " + Startup.BootError : ""));
+                    foreach (StartupItem x in all) if (x.SlowSec >= 0) log.AppendLine("      замедляет: " + x.Name + " — " + x.SlowSec + " с, раз " + x.SlowCount);
+                    check(all.Count > 0, "автозагрузка: список читается");
+
+                    LoadResult lr = new LoadResult();
+                    lr.Idle = new LoadPhase(); for (int i = 0; i < 20; i++) lr.Idle.Rtt.Add(15); lr.Idle.Sent = 20;
+                    lr.Down = new LoadPhase(); lr.Down.Mbps = 90; for (int i = 0; i < 40; i++) lr.Down.Rtt.Add(i < 30 ? 160 : 20); lr.Down.Sent = 40;
+                    lr.Up = new LoadPhase(); lr.Up.Mbps = 40; for (int i = 0; i < 40; i++) lr.Up.Rtt.Add(25); lr.Up.Sent = 40;
+                    string lt; System.Drawing.Color lc;
+                    string v1 = LoadTest.Verdict(lr, out lt, out lc);
+                    lr.Down.Rtt.Clear(); for (int i = 0; i < 40; i++) lr.Down.Rtt.Add(30);
+                    string v2 = LoadTest.Verdict(lr, out lt, out lc);
+                    check(v1 == "Сильные лаги, когда интернет занят" && v2 == "Роутер справляется с нагрузкой", "пинг под нагрузкой: итог — " + v1 + " / " + v2);
+                }
+
                 // Игры: требования Steam
                 {
                     string cm;
@@ -312,6 +465,37 @@ namespace Tunex
         }
 
         // Выдуманный ПК со скрытыми проблемами — для самопроверки и для просмотра интерфейса (--pcdemo)
+        // Выдуманные 2 минуты игры для самопроверки и --lagdemo
+        public static List<LagFrame> FakeLag(string kind)
+        {
+            List<LagFrame> l = new List<LagFrame>();
+            Random r = new Random(7);
+            DateTime t0 = DateTime.Now.AddSeconds(-120);
+            for (int i = 0; i < 120; i++)
+            {
+                LagFrame f = new LagFrame(); f.T = t0.AddSeconds(i);
+                bool hot = i >= 104 && i <= 111;
+                f.Cpu = 38 + r.Next(10); f.Gpu = 70 + r.Next(15); f.Ram = 62 + r.Next(3); f.AvailGb = 5.8f; f.CpuTemp = 68; f.GpuTemp = 66;
+                f.Disk = 3 + r.Next(8); f.DiskName = "D:";
+                ProcLoad game = new ProcLoad(); game.Name = "cs2"; game.Cpu = 30 + r.Next(6); game.MemGb = 3.1f; game.DiskMb = 0.4f; f.Top.Add(game);
+                ProcLoad dc = new ProcLoad(); dc.Name = "discord"; dc.Cpu = 1.5f; dc.MemGb = 0.4f; f.Top.Add(dc);
+                if (hot && kind == "disk") { f.Disk = 96 + r.Next(5); ProcLoad d = new ProcLoad(); d.Name = "msmpeng"; d.Cpu = 9; d.DiskMb = 85; d.MemGb = 0.3f; f.Top.Add(d); }
+                if (hot && kind == "game") { f.Disk = 99; game.DiskMb = 120; }
+                if (hot && kind == "cpu") { f.Cpu = 96; ProcLoad c = new ProcLoad(); c.Name = "chrome"; c.Cpu = 40 + (i == 107 ? 5 : 0); c.MemGb = 1.9f; f.Top.Add(c); }
+                if (hot && kind == "ram") { f.Ram = 97; f.AvailGb = 0.25f; f.Faults = 900; game.MemGb = 5.5f; ProcLoad c = new ProcLoad(); c.Name = "chrome"; c.MemGb = 2.2f; c.Cpu = 3; f.Top.Add(c); }
+                if (kind == "update" && i == 100) f.Started.Add("tiworker");
+                l.Add(f);
+            }
+            return l;
+        }
+
+        public static LagMoment LagDemo()
+        {
+            LagMoment m = LagAnalyzer.Analyze(FakeLag("disk"), "cs2");
+            m.Demo = true;
+            return m;
+        }
+
         public static PcSpecs HiddenDemo()
         {
             PcSpecs hid = new PcSpecs(); hid.Threads = 12;

@@ -741,6 +741,15 @@ namespace Tunex
                 "Windows держит в памяти кэш недавно открытых файлов. Обычно это полезно, но в некоторых играх из-за этого бывают фризы.\nПрограммы при очистке не закрываются.",
                 Recommend.Some, "Если памяти 16 ГБ или меньше"), true, false));
 
+            AppFlagTweak unload = new AppFlagTweak(); unload.Id = "session.unload"; unload.Flag = "unload";
+            Add("session", Text(unload, "Закрывать лишние программы на время игры", "Браузер, торренты и облака закроются и вернутся после игры",
+                "Когда запускается игра из списка, Tunex закрывает программы, выбранные в разделе «Перед игрой» (обычно браузеры, торренты и облачные диски). Окна закрываются как крестиком. Когда игра закрыта, программы открываются снова.\nЕсли программа спрашивает о сохранении, Tunex её не трогает.",
+                Recommend.Some, "Если памяти 16 ГБ или меньше"));
+            AppFlagTweak quiet = new AppFlagTweak(); quiet.Id = "session.quiet"; quiet.Flag = "quiet";
+            Add("session", Text(quiet, "Не беспокоить во время игры", "Уведомления и обновления Windows ждут конца игры",
+                "Пока идёт игра из списка, Tunex включает режим «Не беспокоить» (видны только будильники) и ставит обновления Windows на паузу. Когда игра закрыта, всё возвращается как было.\nДля паузы обновлений нужны права администратора. Если Tunex закроется во время игры, пауза снимется сама через сутки.",
+                Recommend.All, "Рекомендуем всем"));
+
             // ===== Программы рядом с игрой
             DiscordHwTweak dhw = new DiscordHwTweak(); dhw.Id = "apps.discord.hw";
             dhw.ConfirmText = "Если Discord открыт, Tunex закроет его и сразу запустит снова — иначе Discord перезапишет настройку при выходе. Звонок, если он идёт, прервётся.";
@@ -835,6 +844,10 @@ namespace Tunex
         public List<FpsRun> FpsRuns = new List<FpsRun>();   // замеры FPS: по кнопке и за всю игру
         public bool GameSummary;                 // показывать итог после игры (запись FPS, пока идёт игра из списка)
         public int FpsDuration;                  // длительность замера по кнопке, секунд (0 — 60)
+        public List<string> CleanPick = new List<string>(), CleanSkip = new List<string>();   // «Обслуживание»: что чистить сверх / вопреки обычному выбору
+        public List<string> UnloadPick = new List<string>(), UnloadSkip = new List<string>();   // «Перед игрой»: что закрывать сверх / вопреки обычному выбору
+        public List<ClosedApp> Unloaded = new List<ClosedApp>();   // закрытые программы, которые надо вернуть
+        public string QuietSnap;                 // «Не беспокоить» включён: как было до него (null — выключен)
 
         public static string Dir
         {
@@ -864,6 +877,11 @@ namespace Tunex
                         if (s.Benchmarks == null) s.Benchmarks = new List<BenchResult>();
                         if (s.ReqGames == null) s.ReqGames = new List<string>();
                         if (s.FpsRuns == null) s.FpsRuns = new List<FpsRun>();
+                        if (s.UnloadPick == null) s.UnloadPick = new List<string>();
+                        if (s.CleanPick == null) s.CleanPick = new List<string>();
+                        if (s.CleanSkip == null) s.CleanSkip = new List<string>();
+                        if (s.UnloadSkip == null) s.UnloadSkip = new List<string>();
+                        if (s.Unloaded == null) s.Unloaded = new List<ClosedApp>();
                         s.FpsRuns.RemoveAll(delegate(FpsRun r) { return r == null || r.Time == null || r.Game == null; });
                         s.Benchmarks.RemoveAll(delegate(BenchResult b) { return b == null || b.Version != Bench.Version; }); // старая формула
                         return s;

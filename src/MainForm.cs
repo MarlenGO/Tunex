@@ -345,12 +345,18 @@ namespace Tunex
             factories["backup"] = delegate { return new BackupPage(); };
             factories["settings"] = delegate { return new SettingsPage(); };
             factories["fps"] = delegate { return new FpsPage(); };
+            factories["prep"] = delegate { return new PlayPage(); };
+            factories["lag"] = delegate { return new LagPage(); };
+            factories["care"] = delegate { return new CarePage(); };
 
             sidebar.AddItem("home", Icons.Home, "Главная");
             sidebar.AddItem("tune", Icons.Speed, "Оптимизация");
             sidebar.AddItem("pc", Icons.Cpu, "Оценка ПК");
             sidebar.AddItem("games", Icons.Library, "Игры");
+            sidebar.AddItem("prep", Icons.Play, "Перед игрой");
             sidebar.AddItem("fps", Icons.Fps, "Замер FPS");
+            sidebar.AddItem("lag", Icons.Lag, "Разбор лагов");
+            sidebar.AddItem("care", Icons.Repair, "Обслуживание");
             sidebar.AddItem("display", Icons.Display, "Экран");
             sidebar.AddItem("nvidia", Icons.Chip, "NVIDIA");
             sidebar.AddSeparator();
@@ -379,8 +385,10 @@ namespace Tunex
 
             Application.AddMessageFilter(new EdgeResizer(this));
             sensors.Start();
+            LagRecorder.Start();
             ThreadPool.QueueUserWorkItem(delegate { SysInfo.LoadHardware(); });
             ThreadPool.QueueUserWorkItem(delegate { try { PresentMon.CleanupSessions(); } catch { } });   // записи FPS после аварийного выхода
+            try { QuietMode.End(); } catch { }   // «Не беспокоить» остался включён после аварийного выхода
             // Первый запуск: запомнить «как было до Tunex»; потом показать время последнего бэкапа
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -402,9 +410,10 @@ namespace Tunex
                 if (a == "--bench") Shown += delegate { RunBench(); };
                 if (a == "--bottom") Shown += delegate
                 {
-                    // Через 4 с — страницы вроде «Оценки ПК» заполняются в фоне
+                    // Каждые 4 с в течение 32 с — страницы вроде «Оценки ПК» и пинга заполняются в фоне
                     System.Windows.Forms.Timer t = new System.Windows.Forms.Timer(); t.Interval = 4000;
-                    t.Tick += delegate { t.Dispose(); if (current != null) { current.AutoScrollPosition = new Point(0, current.DisplayRectangle.Height); current.Invalidate(true); } };
+                    int ticks = 0;
+                    t.Tick += delegate { if (++ticks >= 8) t.Dispose(); if (current != null) { current.AutoScrollPosition = new Point(0, current.DisplayRectangle.Height); current.Invalidate(true); } };
                     t.Start();
                 };
                 if (a == "--fpssummary") Shown += delegate
@@ -432,9 +441,44 @@ namespace Tunex
             int v = 2; Native.DwmSetWindowAttribute(Handle, 33, ref v, 4);   // скруглённые углы Windows 11
             int dark = Theme.Dark ? 1 : 0; Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
             RegisterHotKey(Handle, HotkeyFps, 0x0002 | 0x0004 | 0x4000, 0x78);   // Ctrl + Shift + F9, без автоповтора
+            LagHotkeyOk = RegisterHotKey(Handle, HotkeyLag, 0x0002 | 0x0004 | 0x4000, 0x79);   // Ctrl + Shift + F10 — разбор лага
         }
 
-        const int HotkeyFps = 0x7F01;
+        const int HotkeyFps = 0x7F01, HotkeyLag = 0x7F02;
+        public static bool LagHotkeyOk = true;
+        DateTime lagLast = DateTime.MinValue;
+
+        // Игра, о которой речь: из списка «Игры» или окно на переднем плане
+        public string CurrentGame()
+        {
+            if (runningGame != null) return runningGame;
+            try
+            {
+                int pid = FpsMeter.ForegroundPid();
+                if (pid > 0 && pid != System.Diagnostics.Process.GetCurrentProcess().Id)
+                    using (System.Diagnostics.Process p = System.Diagnostics.Process.GetProcessById(pid))
+                    {
+                        string n = p.ProcessName;
+                        if (!n.Equals("explorer", StringComparison.OrdinalIgnoreCase) && !FpsCapture.IsNotGame(n + ".exe")) return n;
+                    }
+            }
+            catch { }
+            return null;
+        }
+
+        void CaptureLag()
+        {
+            if ((DateTime.Now - lagLast).TotalSeconds < 3) return;   // двойное нажатие — один разбор
+            lagLast = DateTime.Now;
+            string game = CurrentGame();
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { try { Console.Beep(660, 90); System.Threading.Thread.Sleep(40); Console.Beep(990, 90); } catch { } });
+            LagHistory.Capture(game, delegate(LagMoment m)
+            {
+                if (m == null) { ShowToast("Tunex только что запустился и ещё ничего не записал. Подождите несколько секунд.", Theme.Orange, 6000); return; }
+                LagCause c = m.Main;
+                ShowToast("Лаг разобран: " + (c != null ? c.Title : "") + ". Подробности — в «Разборе лагов».", c != null ? LagPage.Level(c) : Theme.Accent, 7000);
+            });
+        }
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
 
@@ -504,6 +548,7 @@ namespace Tunex
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == 0x0312 && m.WParam.ToInt32() == HotkeyLag) { CaptureLag(); return; }   // Ctrl + Shift + F10
             if (m.Msg == 0x0312 && m.WParam.ToInt32() == HotkeyFps)   // WM_HOTKEY: Ctrl + Shift + F9 — замер FPS прямо из игры
             {
                 string err = FpsMeter.Hotkey();
@@ -705,7 +750,7 @@ namespace Tunex
         }
 
         // ---------------------------------------------------------------- Слежение за играми
-        string runningGame; int watchTick;
+        string runningGame; int watchTick; DateTime gameStarted;
         FpsSession gameFps;   // запись FPS за всю игру для «Итога после игры»
 
         void RebuildCurrentFps()
@@ -720,23 +765,45 @@ namespace Tunex
         {
             AppState st = App.Manager.State;
             bool lower = st.Flags.Contains("lowerbg"), mem = st.Flags.Contains("cleanmem");
-            if (!lower && !mem && !st.GameSummary && runningGame == null) return;
+            bool unload = st.Flags.Contains("unload"), quiet = st.Flags.Contains("quiet");
+            if (!lower && !mem && !unload && !quiet && !st.GameSummary && st.Unloaded.Count == 0 && runningGame == null) return;
             string g = BackgroundPriority.RunningGame(st.Games);
             if (gameFps != null && g != null) gameFps.Sample();
             if (g != null && runningGame == null)
             {
-                runningGame = g;
+                runningGame = g; gameStarted = DateTime.Now;
                 if (st.GameSummary && gameFps == null) gameFps = FpsSession.TryStart(g + ".exe");
-                if (!lower && !mem) return;
+                if (!lower && !mem && !unload && !quiet) return;
                 int n = lower ? BackgroundPriority.Lower() : 0;
+                List<string> calm = quiet ? QuietMode.Begin() : new List<string>();
                 string game = g;
                 ThreadPool.QueueUserWorkItem(delegate
                 {
+                    // Сначала закрыть лишние программы, потом чистить память — так освободится больше
+                    List<ClosedApp> closed = new List<ClosedApp>(); long unloadedMem = 0;
+                    if (unload)
+                    {
+                        try
+                        {
+                            List<AppGroup> pick = new List<AppGroup>();
+                            foreach (AppGroup a in Unload.Scan()) if (Unload.Picked(a)) pick.Add(a);
+                            List<string> failed = new List<string>();
+                            if (pick.Count > 0) closed = Unload.Close(pick, failed);
+                            foreach (AppGroup a in pick) if (!failed.Contains(a.Name)) unloadedMem += a.Memory;
+                        }
+                        catch { }
+                    }
                     long freed = 0; string err = mem && SysInfo.IsAdmin ? MemoryTools.Clean(out freed) : null;
                     string msg = "Запущена игра " + game + ".";
+                    if (closed.Count > 0) msg += " Закрыл до конца игры: " + Names(closed) + " (" + Unload.Size(unloadedMem) + ").";
                     if (lower) msg += " Фоновые программы притормозил: " + n + ".";
                     if (mem && err == null && SysInfo.IsAdmin) msg += " Освободил память: " + (freed >> 20) + " МБ.";
-                    BeginInvoke(new Action(delegate { ShowToast(msg, Theme.Accent, 6000); }));
+                    if (calm.Count > 0) msg += " Не беспокоить: " + string.Join(" и ", calm.ToArray()) + " подождут.";
+                    BeginInvoke(new Action(delegate
+                    {
+                        st.Unloaded.AddRange(closed); st.Save();
+                        ShowToast(msg, Theme.Accent, 7000);
+                    }));
                 });
             }
             else if (g != null && lower && ++watchTick % 10 == 0) BackgroundPriority.Lower(); // новые фоновые процессы
@@ -765,8 +832,27 @@ namespace Tunex
                         catch { }
                     });
                 }
-                if (BackgroundPriority.Active) { BackgroundPriority.RestoreAll(); ShowToast("Игра закрыта — фоновые программы снова работают как обычно.", Theme.Accent, 4000); }
+                List<string> back = new List<string>();
+                int lags = LagHistory.Since(gameStarted);
+                if (lags > 0) back.Add("отмечено лагов: " + lags + ", разбор — в «Разборе лагов»");
+                if (BackgroundPriority.Active) { BackgroundPriority.RestoreAll(); back.Add("фоновые программы работают как обычно"); }
+                if (QuietMode.Active) { QuietMode.End(); back.Add("уведомления и обновления снова включены"); }
+                if (st.Unloaded.Count > 0)
+                {
+                    List<ClosedApp> list = new List<ClosedApp>(st.Unloaded);
+                    st.Unloaded.Clear(); st.Save();
+                    back.Add("открываю " + Names(list));
+                    ThreadPool.QueueUserWorkItem(delegate { try { Unload.Restore(list); } catch { } });
+                }
+                if (back.Count > 0) ShowToast("Игра закрыта: " + string.Join("; ", back.ToArray()) + ".", Theme.Accent, 6000);
             }
+        }
+
+        static string Names(List<ClosedApp> l)
+        {
+            List<string> n = new List<string>();
+            foreach (ClosedApp c in l) if (!n.Contains(c.Name)) n.Add(c.Name);
+            return string.Join(", ", n.ToArray());
         }
 
         public void ShowToast(string text, Color tint, int ms) { toast.ShowText(text, tint, ms); }
@@ -786,10 +872,12 @@ namespace Tunex
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             tick.Stop();
-            try { UnregisterHotKey(Handle, HotkeyFps); } catch { }
+            try { UnregisterHotKey(Handle, HotkeyFps); UnregisterHotKey(Handle, HotkeyLag); } catch { }
+            LagRecorder.Stop();
             FpsMeter.Shutdown();
             if (gameFps != null) { try { gameFps.Finish(); } catch { } gameFps = null; }
             BackgroundPriority.RestoreAll();
+            try { QuietMode.End(); } catch { }
             sensors.Dispose();
             Displays.ReleaseAll();
             App.Manager.State.Save();
